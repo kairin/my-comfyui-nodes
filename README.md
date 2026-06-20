@@ -30,6 +30,30 @@ upstream creator repos
 
 ## Sync To ComfyUI
 
+For normal use, use the single local wrapper:
+
+```bash
+./scripts/comfy-local status
+./scripts/comfy-local sync
+./scripts/comfy-local start
+```
+
+Preferred on a local machine: create an untracked `.envrc.local` file for
+machine-local paths, then allow direnv for this repo.
+
+```bash
+COMFYUI_DIR=/path/to/ComfyUI
+COMFY_CLI_DIR=/path/to/comfy-cli
+```
+
+```bash
+direnv allow
+```
+
+The wrapper also falls back to `.env.local` if direnv is not available.
+
+The lower-level sync script is still available:
+
 ```bash
 COMFYUI_DIR=/path/to/ComfyUI ./scripts/install-to-comfyui.sh
 ```

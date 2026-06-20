@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+config_file="${COMFY_LOCAL_CONFIG:-$repo_dir/.env.local}"
+env_source="none"
+
+load_local_env() {
+  if [[ -n "${COMFY_LOCAL_CONFIG:-}" ]]; then
+    if [[ -f "$config_file" ]]; then
+      set -a
+      # shellcheck source=/dev/null
+      source "$config_file"
+      set +a
+      env_source="$config_file"
+    else
+      env_source="missing COMFY_LOCAL_CONFIG: $config_file"
+    fi
+    return
+  fi
+
+  if command -v direnv >/dev/null 2>&1 && [[ -f "$repo_dir/.envrc" ]]; then
+    local direnv_env
+    if direnv_env="$(cd "$repo_dir" && direnv export bash 2>/dev/null)"; then
+      eval "$direnv_env"
+      env_source="direnv: $repo_dir/.envrc"
+      return
+    fi
+  fi
+
+  local fallback
+  for fallback in "$repo_dir/.env.local" "$repo_dir/.envrc.local"; do
+    if [[ -f "$fallback" ]]; then
+      set -a
+      # shellcheck source=/dev/null
+      source "$fallback"
+      set +a
+      if [[ "$env_source" == "none" ]]; then
+        env_source="$fallback"
+      else
+        env_source="$env_source, $fallback"
+      fi
+    fi
+  done
+}
+
+load_local_env
+
+usage() {
+  cat <<'EOF'
+Usage:
+  scripts/comfy-local <command> [args...]
+
+Commands:
+  status             Show configured paths and patch state.
+  sync               Sync vendored nodes into ComfyUI and apply ComfyUI patches.
+  start              Sync, then launch ComfyUI. Defaults to localhost:8188.
+  update             Run comfy update, then resync vendored nodes.
+  install            Run comfy install, then resync vendored nodes.
+  patch-cli          Apply comfy-cli patches to COMFY_CLI_DIR.
+  patch-comfyui      Apply ComfyUI core patches to COMFYUI_DIR.
+  refresh-upstreams  Refresh vendored node copies from UPSTREAMS.tsv.
+
+Configuration:
+  Preferred: use direnv with .envrc.local next to this script's parent repo.
+  Fallback: use .env.local, or set COMFY_LOCAL_CONFIG to another file.
+
+    COMFYUI_DIR=/path/to/ComfyUI
+    COMFY_CLI_DIR=/path/to/comfy-cli
+
+EOF
+}
+
+require_comfyui_dir() {
+  if [[ -z "${COMFYUI_DIR:-}" ]]; then
+    echo "COMFYUI_DIR is required. Add it to .envrc.local, .env.local, or export it." >&2
+    exit 2
+  fi
+}
+
+require_comfy_cli_dir() {
+  if [[ -z "${COMFY_CLI_DIR:-}" ]]; then
+    echo "COMFY_CLI_DIR is required. Add it to .envrc.local, .env.local, or export it." >&2
+    exit 2
+  fi
+}
+
+patch_state() {
+  local target_dir="$1"
+  local patch="$2"
+
+  if [[ ! -d "$target_dir/.git" ]]; then
+    echo "not a git checkout"
+  elif git -C "$target_dir" apply --reverse --check "$patch" >/dev/null 2>&1; then
+    echo "applied"
+  elif git -C "$target_dir" apply --check "$patch" >/dev/null 2>&1; then
+    echo "not applied"
+  else
+    echo "does not apply cleanly"
+  fi
+}
+
+command="${1:-help}"
+if [[ $# -gt 0 ]]; then
+  shift
+fi
+
+case "$command" in
+  help|-h|--help)
+    usage
+    ;;
+
+  status)
+    echo "Vendored repo: $repo_dir"
+    echo "Env source: $env_source"
+    echo "COMFYUI_DIR: ${COMFYUI_DIR:-not set}"
+    echo "COMFY_CLI_DIR: ${COMFY_CLI_DIR:-not set}"
+
+    if [[ -n "${COMFYUI_DIR:-}" ]]; then
+      echo "ComfyUI exists: $([[ -d "$COMFYUI_DIR" ]] && echo yes || echo no)"
+      echo "ComfyUI patch: $(patch_state "$COMFYUI_DIR" "$repo_dir/comfyui-patches/comfy-sd-qwen-image-vae.patch")"
+    fi
+
+    if [[ -n "${COMFY_CLI_DIR:-}" ]]; then
+      echo "comfy-cli exists: $([[ -d "$COMFY_CLI_DIR" ]] && echo yes || echo no)"
+      echo "comfy-cli patch: $(patch_state "$COMFY_CLI_DIR" "$repo_dir/comfy-cli-patches/add-local-nodes-command.patch")"
+    fi
+    ;;
+
+  sync)
+    require_comfyui_dir
+    COMFYUI_DIR="$COMFYUI_DIR" "$repo_dir/scripts/install-to-comfyui.sh" "$@"
+    ;;
+
+  start|launch)
+    require_comfyui_dir
+    require_comfy_cli_dir
+    COMFYUI_DIR="$COMFYUI_DIR" "$repo_dir/scripts/install-to-comfyui.sh"
+    if [[ $# -eq 0 ]]; then
+      set -- --listen 127.0.0.1 --port 8188
+    fi
+    cd "$COMFY_CLI_DIR"
+    exec uv run comfy --workspace "$COMFYUI_DIR" launch -- "$@"
+    ;;
+
+  update)
+    require_comfyui_dir
+    require_comfy_cli_dir
+    COMFYUI_DIR="$COMFYUI_DIR" COMFY_CLI_DIR="$COMFY_CLI_DIR" "$repo_dir/scripts/comfy-update-with-local-nodes.sh" "$@"
+    ;;
+
+  install)
+    require_comfyui_dir
+    require_comfy_cli_dir
+    COMFYUI_DIR="$COMFYUI_DIR" COMFY_CLI_DIR="$COMFY_CLI_DIR" "$repo_dir/scripts/comfy-install-with-local-nodes.sh" "$@"
+    ;;
+
+  patch-cli)
+    require_comfy_cli_dir
+    COMFY_CLI_DIR="$COMFY_CLI_DIR" "$repo_dir/scripts/apply-comfy-cli-patches.sh" "$@"
+    ;;
+
+  patch-comfyui)
+    require_comfyui_dir
+    COMFYUI_DIR="$COMFYUI_DIR" "$repo_dir/scripts/apply-comfyui-patches.sh" "$@"
+    ;;
+
+  refresh-upstreams)
+    "$repo_dir/scripts/update-from-upstreams.sh" "$@"
+    ;;
+
+  *)
+    echo "Unknown command: $command" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

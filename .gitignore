@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+.envrc.local
 *.token
 *.key
 *.pem

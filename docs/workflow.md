@@ -2,18 +2,24 @@
 
 ## Daily Use
 
+0. Let direnv load your local paths:
+
+   ```bash
+   direnv allow
+   ```
+
 1. Edit vendored custom node files in this repository.
 2. Commit the change here.
 3. Sync into the ComfyUI workspace:
 
    ```bash
-   COMFYUI_DIR=/path/to/ComfyUI ./scripts/install-to-comfyui.sh
+   ./scripts/comfy-local sync
    ```
 
 4. Launch ComfyUI with the synced copy:
 
    ```bash
-   COMFYUI_DIR=/path/to/ComfyUI ./scripts/comfy-launch-with-local-nodes.sh -- --listen 127.0.0.1 --port 8188
+   ./scripts/comfy-local start
    ```
 
 ## Updating Upstream Node Code
