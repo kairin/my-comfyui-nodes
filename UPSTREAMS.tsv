@@ -1,0 +1,9 @@
+# folder	repository	source	ref_or_version	notes
+ComfyUI-GGUF	https://github.com/city96/ComfyUI-GGUF	git	6ea2651e7df66d7585f6ffee804b20e92fb38b8a	Git checkout in live custom_nodes
+ComfyUI-Qwen3.5-Uncensored	https://github.com/Deaquay/ComfyUI-Qwen3.5-Uncensored	git	a09d046f2c466fa6e5df0960fa21714b21a6d345	Git checkout in live custom_nodes
+ComfyUI-QwenVL	https://github.com/1038lab/ComfyUI-QwenVL	manager	2.1.1	Manager-installed folder vendored from live custom_nodes
+ComfyUI_Simple_Qwen3-VL-gguf	https://github.com/KLL535/ComfyUI_Simple_Qwen3-VL-gguf	manager	2.1	Manager-installed folder vendored from live custom_nodes
+comfyui-kjnodes	https://github.com/kijai/ComfyUI-KJNodes	manager	1.4.7	Manager-installed folder vendored from live custom_nodes
+comfyui-llm-session	https://github.com/kantan-kanto/ComfyUI-LLM-Session	manager	1.2.3	Manager-installed folder vendored from live custom_nodes
+comfyui-rmbg	https://github.com/1038lab/ComfyUI-RMBG	manager	3.0.0	Manager-installed folder vendored from live custom_nodes
+comfyui-videohelpersuite	https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite	manager	1.7.9	Manager-installed folder vendored from live custom_nodes

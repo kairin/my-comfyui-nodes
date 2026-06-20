@@ -1,0 +1,275 @@
+diff --git a/comfy_cli/cmdline.py b/comfy_cli/cmdline.py
+index 1a5dfec..db0b61a 100644
+--- a/comfy_cli/cmdline.py
++++ b/comfy_cli/cmdline.py
+@@ -13,6 +13,7 @@ from comfy_cli import constants, env_checker, logging, tracking, ui, utils
+ from comfy_cli.command import code_search, custom_nodes, pr_command
+ from comfy_cli.command import generate as generate_command
+ from comfy_cli.command import install as install_inner
++from comfy_cli.command import local_nodes as local_nodes_command
+ from comfy_cli.command import run as run_inner
+ from comfy_cli.command.install import validate_version
+ from comfy_cli.command.launch import launch as launch_command
+@@ -780,6 +781,7 @@ def standalone(
+ generate_command.register_with(app)
+ app.add_typer(models_command.app, name="model", help="Manage models.")
+ app.add_typer(custom_nodes.app, name="node", help="Manage custom nodes.")
++app.add_typer(local_nodes_command.app, name="local-nodes", help="Sync vendored local custom nodes.")
+ app.add_typer(custom_nodes.manager_app, name="manager", help="Manage ComfyUI-Manager.")
+ 
+ app.add_typer(pr_command.app, name="pr-cache", help="Manage PR cache.")
+diff --git a/comfy_cli/command/local_nodes.py b/comfy_cli/command/local_nodes.py
+new file mode 100644
+index 0000000..528687d
+--- /dev/null
++++ b/comfy_cli/command/local_nodes.py
+@@ -0,0 +1,188 @@
++import fnmatch
++import os
++import shutil
++import subprocess
++from pathlib import Path
++from typing import Annotated
++
++import typer
++from rich import print as rprint
++
++from comfy_cli import tracking
++from comfy_cli.workspace_manager import WorkspaceManager
++
++app = typer.Typer()
++workspace_manager = WorkspaceManager()
++
++DEFAULT_REPO = "~/my-comfyui-nodes"
++
++EXCLUDED_NAMES = {
++    ".git",
++    ".hg",
++    ".svn",
++    "__pycache__",
++    ".pytest_cache",
++    ".mypy_cache",
++    ".ruff_cache",
++    ".tracking",
++    ".env",
++    ".env.local",
++    "custom_models.json",
++    "debug_config.json",
++    "system_prompts_user.json",
++}
++
++EXCLUDED_PATTERNS = [
++    "*.pyc",
++    "*.pyo",
++    "*.log",
++    "*.sqlite",
++    "*.db",
++    "*.token",
++    "*.safetensors",
++    "*.ckpt",
++    "*.pt",
++    "*.pth",
++    "*.bin",
++    "*.gguf",
++    "*.onnx",
++    "debug_*.json",
++]
++
++
++def _resolve_repo(repo: str | Path | None) -> Path:
++    value = repo or os.environ.get("COMFY_LOCAL_NODES_REPO") or DEFAULT_REPO
++    return Path(value).expanduser().resolve()
++
++
++def _selected_workspace() -> Path:
++    if workspace_manager.workspace_path is None:
++        rprint("[bold red]ComfyUI workspace is not set.[/bold red]")
++        rprint("[dim]Use --workspace, --recent, --here, or set a default workspace.[/dim]")
++        raise typer.Exit(code=1)
++    return Path(workspace_manager.workspace_path).expanduser().resolve()
++
++
++def _is_excluded(name: str) -> bool:
++    if name in EXCLUDED_NAMES:
++        return True
++    return any(fnmatch.fnmatch(name, pattern) for pattern in EXCLUDED_PATTERNS)
++
++
++def _ignore(_directory: str, names: list[str]) -> set[str]:
++    return {name for name in names if _is_excluded(name)}
++
++
++def _copy_item(source: Path, destination: Path, dry_run: bool) -> None:
++    if dry_run:
++        rprint(f"[dim]would sync[/dim] {source} -> {destination}")
++        return
++
++    if source.is_dir():
++        destination.mkdir(parents=True, exist_ok=True)
++        shutil.copytree(source, destination, dirs_exist_ok=True, ignore=_ignore)
++    else:
++        destination.parent.mkdir(parents=True, exist_ok=True)
++        shutil.copy2(source, destination)
++
++
++def _apply_patch(workspace: Path, patch_path: Path, dry_run: bool) -> None:
++    check_cmd = ["git", "-C", str(workspace), "apply", "--check", str(patch_path)]
++    reverse_check_cmd = ["git", "-C", str(workspace), "apply", "--reverse", "--check", str(patch_path)]
++
++    if subprocess.run(check_cmd, check=False, capture_output=True).returncode == 0:
++        if dry_run:
++            rprint(f"[dim]would apply patch[/dim] {patch_path.name}")
++            return
++        subprocess.run(["git", "-C", str(workspace), "apply", str(patch_path)], check=True)
++        rprint(f"[green]Applied patch:[/green] {patch_path.name}")
++        return
++
++    if subprocess.run(reverse_check_cmd, check=False, capture_output=True).returncode == 0:
++        rprint(f"[yellow]Patch already applied:[/yellow] {patch_path.name}")
++        return
++
++    rprint(f"[bold red]Patch does not apply cleanly:[/bold red] {patch_path}")
++    raise typer.Exit(code=1)
++
++
++def _sync(repo_path: Path, workspace: Path, apply_patches: bool, dry_run: bool) -> None:
++    source_root = repo_path / "custom_nodes"
++    if not source_root.is_dir():
++        rprint(f"[bold red]Vendored custom_nodes directory not found:[/bold red] {source_root}")
++        raise typer.Exit(code=1)
++
++    destination_root = workspace / "custom_nodes"
++    if not dry_run:
++        destination_root.mkdir(parents=True, exist_ok=True)
++
++    for source in sorted(source_root.iterdir(), key=lambda p: p.name.lower()):
++        if _is_excluded(source.name):
++            continue
++        _copy_item(source, destination_root / source.name, dry_run=dry_run)
++
++    if apply_patches:
++        patches_dir = repo_path / "comfyui-patches"
++        for patch_path in sorted(patches_dir.glob("*.patch")) if patches_dir.is_dir() else []:
++            _apply_patch(workspace, patch_path, dry_run=dry_run)
++
++
++@app.command(help="Show the selected vendored-node repo and ComfyUI workspace.")
++@tracking.track_command("local-nodes")
++def status(
++    repo: Annotated[
++        str | None,
++        typer.Option("--repo", help="Vendored node repo. Defaults to COMFY_LOCAL_NODES_REPO or ~/my-comfyui-nodes."),
++    ] = None,
++):
++    repo_path = _resolve_repo(repo)
++    workspace = _selected_workspace()
++    rprint(f"Vendored node repo: [bold]{repo_path}[/bold]")
++    rprint(f"ComfyUI workspace: [bold]{workspace}[/bold]")
++    rprint(f"Vendored custom_nodes: {'yes' if (repo_path / 'custom_nodes').is_dir() else 'no'}")
++    rprint(f"ComfyUI custom_nodes: {'yes' if (workspace / 'custom_nodes').is_dir() else 'no'}")
++
++
++@app.command(help="Sync vendored custom nodes into the selected ComfyUI workspace.")
++@tracking.track_command("local-nodes")
++def sync(
++    repo: Annotated[
++        str | None,
++        typer.Option("--repo", help="Vendored node repo. Defaults to COMFY_LOCAL_NODES_REPO or ~/my-comfyui-nodes."),
++    ] = None,
++    apply_patches: Annotated[
++        bool,
++        typer.Option("--apply-patches/--no-patches", help="Apply repo/comfyui-patches/*.patch after syncing nodes."),
++    ] = True,
++    dry_run: Annotated[
++        bool,
++        typer.Option("--dry-run", help="Print actions without copying files or applying patches."),
++    ] = False,
++):
++    repo_path = _resolve_repo(repo)
++    workspace = _selected_workspace()
++    _sync(repo_path, workspace, apply_patches=apply_patches, dry_run=dry_run)
++    rprint("[bold green]Local nodes sync complete.[/bold green]")
++
++
++@app.command("apply-patches", help="Apply vendored ComfyUI core patches without syncing custom nodes.")
++@tracking.track_command("local-nodes")
++def apply_patches(
++    repo: Annotated[
++        str | None,
++        typer.Option("--repo", help="Vendored node repo. Defaults to COMFY_LOCAL_NODES_REPO or ~/my-comfyui-nodes."),
++    ] = None,
++    dry_run: Annotated[
++        bool,
++        typer.Option("--dry-run", help="Print actions without applying patches."),
++    ] = False,
++):
++    repo_path = _resolve_repo(repo)
++    workspace = _selected_workspace()
++    patches_dir = repo_path / "comfyui-patches"
++    if not patches_dir.is_dir():
++        rprint(f"[yellow]No patch directory found:[/yellow] {patches_dir}")
++        return
++    for patch_path in sorted(patches_dir.glob("*.patch")):
++        _apply_patch(workspace, patch_path, dry_run=dry_run)
++    rprint("[bold green]Patch application complete.[/bold green]")
+diff --git a/tests/comfy_cli/test_local_nodes.py b/tests/comfy_cli/test_local_nodes.py
+new file mode 100644
+index 0000000..32a086f
+--- /dev/null
++++ b/tests/comfy_cli/test_local_nodes.py
+@@ -0,0 +1,55 @@
++from pathlib import Path
++from unittest.mock import patch
++
++from comfy_cli.command import local_nodes
++
++
++def test_sync_copies_vendored_node_to_workspace(tmp_path):
++    repo = tmp_path / "repo"
++    workspace = tmp_path / "ComfyUI"
++    node = repo / "custom_nodes" / "ExampleNode"
++    node.mkdir(parents=True)
++    (node / "node.py").write_text("VALUE = 1\n", encoding="utf-8")
++    (node / "__pycache__").mkdir()
++    (node / "__pycache__" / "node.pyc").write_bytes(b"cache")
++
++    with patch.object(local_nodes.workspace_manager, "workspace_path", str(workspace)):
++        local_nodes.sync(repo=str(repo), apply_patches=False)
++
++    copied = workspace / "custom_nodes" / "ExampleNode" / "node.py"
++    assert copied.read_text(encoding="utf-8") == "VALUE = 1\n"
++    assert not (workspace / "custom_nodes" / "ExampleNode" / "__pycache__").exists()
++
++
++def test_apply_patch_skips_already_applied_patch(tmp_path):
++    repo = tmp_path / "repo"
++    workspace = tmp_path / "ComfyUI"
++    patches = repo / "comfyui-patches"
++    patches.mkdir(parents=True)
++    patch_path = patches / "already.patch"
++    patch_path.write_text("diff --git a/file b/file\n", encoding="utf-8")
++
++    def run_side_effect(cmd, check=False, capture_output=False):
++        class Result:
++            returncode = 1
++
++        class ReverseResult:
++            returncode = 0
++
++        if "--reverse" in cmd:
++            return ReverseResult()
++        return Result()
++
++    with (
++        patch.object(local_nodes.workspace_manager, "workspace_path", str(workspace)),
++        patch("comfy_cli.command.local_nodes.subprocess.run", side_effect=run_side_effect) as mock_run,
++    ):
++        local_nodes.apply_patches(repo=str(repo))
++
++    assert mock_run.call_count == 2
++
++
++def test_resolve_repo_prefers_environment(tmp_path, monkeypatch):
++    monkeypatch.setenv("COMFY_LOCAL_NODES_REPO", str(tmp_path))
++
++    assert local_nodes._resolve_repo(None) == Path(tmp_path).resolve()

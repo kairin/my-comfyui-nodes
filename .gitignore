@@ -1,0 +1,40 @@
+.env
+.env.*
+!.env.example
+*.token
+*.key
+*.pem
+*.log
+*.sqlite
+*.db
+*.pyc
+*.pyo
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Runtime and machine-local state.
+tmp/
+temp/
+logs/
+run/
+user/
+output/
+input/
+.tracking
+
+# Model/checkpoint payloads should not live in this public repo.
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.gguf
+*.onnx
+
+# Local custom configuration that may contain paths, prompts, or tokens.
+custom_models.json
+system_prompts_user.json
+debug_config.json
+debug_*.json

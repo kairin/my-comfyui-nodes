@@ -1,0 +1,126 @@
+# qwen3vl_run.py
+import sys
+import json
+import gc
+import os
+from pathlib import Path
+
+def is_nonempty_string(s):
+    return isinstance(s, str) and s.strip() != ""
+
+def main():
+    try:
+        if len(sys.argv) != 2:
+            print(json.dumps({
+                "status": "error",
+                "message": "Usage: python qwen3vl_run.py <config.json>"
+            }, ensure_ascii=True))
+            sys.exit(1)
+
+        config_path = sys.argv[1]
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+
+        from llama_cpp import Llama
+
+        mmproj_path = config.get("mmproj_path")
+        is_vision_model = is_nonempty_string(mmproj_path)
+
+        mmproj_kwargs = {
+            "clip_model_path": mmproj_path,
+            "image_max_tokens": config.get("image_max_tokens", 4096),
+            "force_reasoning": False,
+            "verbose": False,
+        }
+
+        images = config.get('images',[])
+        if images and is_vision_model:
+            try:
+                from llama_cpp.llama_chat_format import Qwen3VLChatHandler
+            except ImportError:
+                # для старых версий
+                try:
+                    from llama_cpp.llama_chat_format import Qwen25VLChatHandler
+                except ImportError:
+                    # для еще более старых версий
+                    from llama_cpp.llama_chat_format import Qwen2VLChatHandler
+                    chat_handler = Qwen2VLChatHandler(**mmproj_kwargs)
+                else:
+                    chat_handler = Qwen25VLChatHandler(**mmproj_kwargs)
+            else:
+                chat_handler = Qwen3VLChatHandler(**mmproj_kwargs)
+
+        if images and is_vision_model:
+
+            content = [{"type": "text", "text": config["user_prompt"]}]
+
+            for img_path in config["images"]:
+                if img_path:  # путь к файлу
+                    file_url = Path(img_path).resolve().as_uri()
+                    content.append({
+                        "type": "image_url",
+                        "image_url": {"url": file_url}
+                    })
+
+            messages = [
+                { "role": "system", "content": config["system_prompt"] },
+                { "role": "user", "content": content }
+            ]
+
+        else:
+            chat_handler=None
+            messages = [
+                { "role": "system", "content": config["system_prompt"] },
+                { "role": "user", "content": config["user_prompt"] }
+            ]    
+
+        llm_kwargs = {
+            "model_path": config["model_path"],
+            "n_ctx": config.get("ctx", 8192),
+            "n_gpu_layers": config.get("gpu_layers", 0),
+            "n_batch": config.get("n_batch", 512),
+            "swa_full": True,
+            "verbose": False,
+            "pool_size": config.get("pool_size", 4194304),
+        }
+
+        if is_vision_model:
+            llm_kwargs["chat_handler"] = chat_handler
+            llm_kwargs["image_min_tokens"] = 1024
+            llm_kwargs["image_max_tokens"] = config.get("image_max_tokens", 4096)    
+
+        #llm_kwargs["flash_attn"] = True
+
+        llm = Llama(**llm_kwargs)
+
+        result = llm.create_chat_completion(
+            messages=messages,
+            max_tokens=config.get("max_tokens", 2048),
+            temperature=config.get("temperature", 0.7),
+            seed=config.get("seed", 42),
+            repeat_penalty=config.get("repeat_penalty", 1.2),   
+            top_p=config.get("top_p", 0.92),
+            top_k=config.get("top_k", 0),
+            stop=["<|im_end|>", "<|im_start|>" ],
+        )
+
+        output = result["choices"][0]["message"]["content"]
+
+        del llm
+        del chat_handler
+        gc.collect()
+
+        print(json.dumps({"status": "success", "output": output}, ensure_ascii=True))
+
+    except Exception as e:
+        import traceback
+        print(json.dumps({
+            "status": "error",
+            "message": str(e),
+            "traceback": traceback.format_exc()
+        }, ensure_ascii=True))
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
+    

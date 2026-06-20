@@ -1,0 +1,60 @@
+diff --git a/comfy/sd.py b/comfy/sd.py
+index d9b1c055..a2fe4d11 100644
+--- a/comfy/sd.py
++++ b/comfy/sd.py
+@@ -86,6 +86,34 @@ import comfy.latent_formats
+ 
+ import comfy.ldm.flux.redux
+ 
++try:
++    from diffusers import AutoencoderKLQwenImage
++except Exception:
++    AutoencoderKLQwenImage = None
++
++
++def qwen_image_vae():
++    if AutoencoderKLQwenImage is None:
++        raise RuntimeError("Qwen Image VAE support requires diffusers with AutoencoderKLQwenImage.")
++
++    class ComfyAutoencoderKLQwenImage(AutoencoderKLQwenImage):
++        @property
++        def device(self):
++            return getattr(self, "_comfy_device", next(self.parameters()).device)
++
++        @device.setter
++        def device(self, value):
++            self._comfy_device = value
++
++        def encode(self, x):
++            return super().encode(x, return_dict=True).latent_dist.sample()
++
++        def decode(self, z, **kwargs):
++            return super().decode(z, return_dict=True).sample
++
++    return ComfyAutoencoderKLQwenImage()
++
++
+ def load_lora_for_models(model, clip, lora, strength_model, strength_clip, lora_metadata=None):
+     key_map = {}
+     if model is not None:
+@@ -542,6 +570,20 @@ class VAE:
+                 self.first_stage_model = StageC_coder()
+                 self.downscale_ratio = 32
+                 self.latent_channels = 16
++            elif "encoder.down_blocks.0.norm1.gamma" in sd and "decoder.up_blocks.0.resnets.0.norm1.gamma" in sd and sd["encoder.conv_in.weight"].ndim == 5: #Qwen Image VAE
++                self.first_stage_model = qwen_image_vae()
++                self.latent_channels = sd["post_quant_conv.weight"].shape[0]
++                self.output_channels = sd["encoder.conv_in.weight"].shape[1]
++                self.latent_dim = 3
++                self.not_video = True
++                self.downscale_ratio = (lambda a: max(0, math.floor((a + 3) / 4)), 8, 8)
++                self.downscale_index_formula = (4, 8, 8)
++                self.upscale_ratio = (lambda a: max(0, a * 4 - 3), 8, 8)
++                self.upscale_index_formula = (4, 8, 8)
++                self.working_dtypes = [torch.bfloat16, torch.float32]
++
++                self.memory_used_encode = lambda shape, dtype: (1400 * shape[-2] * shape[-1]) * model_management.dtype_size(dtype)
++                self.memory_used_decode = lambda shape, dtype: (2800 * shape[-3] * shape[-2] * shape[-1] * 8 * 8) * model_management.dtype_size(dtype)
+             elif "decoder.conv_in.weight" in sd:
+                 if sd['decoder.conv_in.weight'].shape[1] == 64:
+                     ddconfig = {"block_out_channels": [128, 256, 512, 512, 1024, 1024], "in_channels": 3, "out_channels": 3, "num_res_blocks": 2, "ffactor_spatial": 32, "downsample_match_channel": True, "upsample_match_channel": True}
