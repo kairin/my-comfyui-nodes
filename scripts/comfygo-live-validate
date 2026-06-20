@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+# comfygo-live-validate — deterministic live runtime validation.
+#
+# Records preflight status, runs sync, runs doctor, verifies required
+# health lines, preserves logs in a temporary evidence directory, and
+# exits non-zero on any failed check.
+#
+# Usage:
+#   scripts/comfygo-live-validate
+#
+# Environment:
+#   COMFYUI_DIR   — path to the live ComfyUI code checkout
+#   COMFY_CLI_DIR — path to the comfy-cli checkout (optional, used by doctor)
+#
+# Exit codes:
+#   0  — all checks passed
+#   1  — one or more checks failed (details in evidence directory)
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# ── Evidence directory (create first, before any failure) ───────────
+run_dir="$(mktemp -d /tmp/comfygo-live.XXXXXX)" || {
+    echo "FATAL: could not create evidence directory" >&2
+    exit 1
+}
+echo "Evidence: $run_dir"
+
+# ── Helper: log + fail accumulator ──────────────────────────────────
+failed=0
+record_fail() {
+    local msg="$1"
+    echo "  FAIL: $msg"
+    failed=1
+}
+
+# ── Pre-flight checks (non-fatal blocking — still record evidence) ──
+if ! command -v "$REPO_DIR/scripts/comfygo" >/dev/null 2>&1; then
+    echo "ERROR: scripts/comfygo not found in $REPO_DIR" >&2
+    exit 1
+fi
+if [ -z "${COMFYUI_DIR:-}" ]; then
+    record_fail "COMFYUI_DIR is not set — export it or load direnv"
+fi
+if [ -n "${COMFYUI_DIR:-}" ] && [ ! -d "$COMFYUI_DIR" ]; then
+    record_fail "COMFYUI_DIR does not exist: $COMFYUI_DIR"
+fi
+
+# Also check for dirty git before validation — must start clean.
+pre_status_log="$run_dir/git-status-before.log"
+if ! git -C "$REPO_DIR" status --porcelain=v1 --untracked-files=all \
+    > "$pre_status_log" 2>&1; then
+    record_fail "git status before failed — see $pre_status_log"
+fi
+if [ -s "$pre_status_log" ]; then
+    record_fail "repo is dirty before validation — clean it first"
+    cat "$pre_status_log"
+fi
+
+# Preflight failures are non-recoverable; stop here.
+if [ "$failed" -ne 0 ]; then
+    echo ""
+    echo "FAIL: pre-flight checks failed — see evidence above"
+    echo "Evidence: $run_dir"
+    exit 1
+fi
+
+# ── Phase 1: Preflight status ───────────────────────────────────────
+echo ""
+echo "--- Phase 1: Preflight status ---"
+git -C "$REPO_DIR" status --short --branch \
+    | tee "$run_dir/git-status-short-before.log"
+
+if ! "$REPO_DIR/scripts/comfygo" status \
+    > "$run_dir/status-before.log" 2>&1; then
+    echo "  (comfygo status returned non-zero — logged, continuing)"
+fi
+
+# ── Phase 2: Baseline doctor (non-fatal) ────────────────────────────
+echo ""
+echo "--- Phase 2: Baseline doctor ---"
+if ! "$REPO_DIR/scripts/comfygo" doctor \
+    > "$run_dir/doctor-before.log" 2>&1; then
+    echo "  (baseline doctor returned non-zero — logged, continuing)"
+fi
+
+# ── Phase 3: Sync ───────────────────────────────────────────────────
+echo ""
+echo "--- Phase 3: Sync ---"
+if "$REPO_DIR/scripts/comfygo" sync > "$run_dir/sync.log" 2>&1; then
+    echo "  PASS: sync completed"
+else
+    record_fail "sync failed"
+    echo "--- last 30 lines of sync.log ---"
+    tail -30 "$run_dir/sync.log"
+fi
+
+# ── Phase 4: Doctor after sync ──────────────────────────────────────
+echo ""
+echo "--- Phase 4: Doctor after sync ---"
+if "$REPO_DIR/scripts/comfygo" doctor > "$run_dir/doctor-after.log" 2>&1; then
+    echo "  PASS: doctor exited 0"
+else
+    record_fail "doctor returned non-zero"
+    echo "--- last 30 lines of doctor-after.log ---"
+    tail -30 "$run_dir/doctor-after.log"
+fi
+
+# ── Phase 5: Required health line checks ────────────────────────────
+echo ""
+echo "--- Phase 5: Health line checks ---"
+check_line() {
+    local pattern="$1"
+    local label="$2"
+    if grep -Fq "$pattern" "$run_dir/doctor-after.log"; then
+        echo "  PASS: $label"
+    else
+        record_fail "$label — pattern not found: $pattern"
+    fi
+}
+
+check_line "Model registry source: present"         "model registry source"
+check_line "Model registry runtime copy: present"   "model registry runtime copy"
+check_line "Model root readable: yes"               "model root readable"
+check_line "Model registry CLI dry-run: ok"         "model registry CLI dry-run"
+
+if grep -qE "Expected nodes: [0-9]+ present" "$run_dir/doctor-after.log"; then
+    echo "  PASS: expected nodes present"
+else
+    record_fail "expected nodes not found in doctor output"
+fi
+
+# ── Phase 6: Post-validation git status ─────────────────────────────
+echo ""
+echo "--- Phase 6: Post-validation git status ---"
+post_status_log="$run_dir/git-status-after.log"
+if ! git -C "$REPO_DIR" status --porcelain=v1 --untracked-files=all \
+    > "$post_status_log" 2>&1; then
+    record_fail "git status after failed"
+fi
+if [ -s "$post_status_log" ]; then
+    record_fail "repo is dirty after validation — unexpected side effect"
+    cat "$post_status_log"
+fi
+# Also log the short form for readability.
+git -C "$REPO_DIR" status --short --branch \
+    | tee "$run_dir/git-status-short-after.log"
+
+# Verify no tracked files were dirtied (ignoring untracked which we
+# already checked above).
+if ! git -C "$REPO_DIR" diff-index --quiet HEAD --; then
+    record_fail "tracked files modified by validation"
+    git -C "$REPO_DIR" diff --stat
+fi
+
+# ── Result ──────────────────────────────────────────────────────────
+echo ""
+if [ "$failed" -eq 0 ]; then
+    echo "PASS: live runtime validation succeeded"
+    echo "Evidence: $run_dir"
+    exit 0
+else
+    echo "FAIL: one or more checks failed"
+    echo "Evidence: $run_dir"
+    echo ""
+    echo "If doctor reported pending registry changes, reconcile first:"
+    echo "  $REPO_DIR/scripts/comfygo models reconcile --apply"
+    echo "  $REPO_DIR/scripts/comfygo doctor"
+    echo "Then re-run:  $0"
+    exit 1
+fi

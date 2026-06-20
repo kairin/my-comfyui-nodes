@@ -175,3 +175,36 @@ UV_CACHE_DIR=/tmp/uv-cache uv run pytest custom_nodes/comfygo_model_registry/tes
 ```
 
 **Expected**: All tests pass.
+
+### Scenario 9: Live Runtime Validation
+
+1. Run the live validation wrapper:
+
+   ```bash
+   scripts/comfygo-live-validate
+   ```
+
+2. **Expected**:
+   - The command exits 0.
+   - Output prints an evidence directory under `/tmp/comfygo-live.*`.
+   - `scripts/comfygo sync` completes.
+   - `scripts/comfygo doctor` passes after sync.
+   - Doctor output includes:
+       - `Model registry source: present`
+       - `Model registry runtime copy: present`
+       - `Model root readable: yes`
+       - `Model registry CLI dry-run: ok`
+       - `Expected nodes: ... present`
+   - `git status --short --branch` remains clean before and after validation.
+
+3. **Failure rule**: A failed doctor run is not success. If doctor reports
+   pending registry changes, inspect the evidence log and run the documented
+   reconcile command intentionally before repeating validation:
+
+   ```bash
+   scripts/comfygo models reconcile --apply
+   scripts/comfygo doctor
+   scripts/comfygo-live-validate
+   ```
+
+**Expected**: All tests pass.

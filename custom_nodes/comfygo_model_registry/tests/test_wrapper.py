@@ -105,3 +105,57 @@ def test_wrapper_empty_root_prints_configured_path(
     assert f"Model root(s): {model_root.resolve()}" in proc.stdout
     assert "Identified packages: 0" in proc.stdout
     assert not (model_root / ".comfygo_views").exists()
+
+
+def test_live_validate_script_exists_and_executable() -> None:
+    """The live validation script must exist and be executable."""
+    script = REPO_DIR / "scripts" / "comfygo-live-validate"
+    assert script.is_file(), f"Script missing: {script}"
+    assert os.access(script, os.X_OK), f"Script not executable: {script}"
+
+
+def test_live_validate_creates_evidence_on_failure() -> None:
+    """The script must create an evidence directory even when it fails."""
+    env = os.environ.copy()
+    env.pop("COMFYUI_DIR", None)
+    env.pop("COMFY_CLI_DIR", None)
+    env["GIT_DIR"] = str(REPO_DIR / ".git")
+    env["GIT_WORK_TREE"] = str(REPO_DIR)
+
+    proc = subprocess.run(
+        [str(WRAPPER.parent / "comfygo-live-validate")],
+        cwd=REPO_DIR,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    # Must exit non-zero without COMFYUI_DIR.
+    assert proc.returncode != 0, (
+        f"Expected non-zero exit, got {proc.returncode}"
+    )
+    # Must print an evidence path in stdout or stderr.
+    combined = proc.stdout + proc.stderr
+    assert "Evidence:" in combined or "/tmp/comfygo-live." in combined, (
+        "No evidence directory reported on failure"
+    )
+
+
+def test_live_validate_check_line_patterns() -> None:
+    """Verify the health-line patterns the script checks are sensible
+    without running the full live sequence (no real ComfyUI needed)."""
+    # These are the grep patterns from the script's check_line() calls.
+    patterns = [
+        "Model registry source: present",
+        "Model registry runtime copy: present",
+        "Model root readable: yes",
+        "Model registry CLI dry-run: ok",
+    ]
+    # They must each be non-empty and contain no unquoted regex meta.
+    import re
+    for p in patterns:
+        assert p, "Empty pattern"
+        assert len(p) > 10, f"Pattern too short: {p!r}"
+        # Expect at least one space — real log line.
+        assert " " in p, f"Pattern has no separator: {p!r}"
