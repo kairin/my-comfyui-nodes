@@ -26,6 +26,12 @@ compatibility views"
 - Q: How does `comfygo doctor` validate the model registry? → A: The doctor check runs `comfygo-models.sh --models-dir "$model_root" reconcile` (dry-run mode), then fails if the report contains pending creates, prunes, or conflicts. It also snapshots `.comfygo_views` before and after the dry-run with a deterministic filesystem listing and fails if the snapshot changes.
 - Q: How is the AUTORUN test verified to actually prevent registry execution? → A: The test starts a fresh Python subprocess with `COMFYGO_MODEL_REGISTRY_AUTORUN=0`, injects a fake observable `folder_paths` module, imports the registry package, and asserts that neither registry registration nor reconcile side effects occurred.
 
+### Session 2026-06-20 (Live Validation Harden)
+
+- Q: How does `scripts/comfygo-live-validate` handle `set -e`-sensitive failures? → A: `set -e` is removed. All command calls that can fail (doctor, sync) are wrapped in `if` blocks with captured return codes and a `failed` accumulator so that every phase runs and all failures are reported before exit. An evidence directory is created before any checks, so logs survive even a pre-flight abort.
+- Q: How does the script enforce clean git state? → A: Before validation, `git status --porcelain=v1 --untracked-files=all` must produce empty output — if dirty, the script reports every dirty file and exits 1 with evidence logged. After validation, the same check runs and fails the run if the validation itself dirtied the repo.
+- Q: What test coverage exists for the live validation script? → A: Three tests in `test_wrapper.py`: (1) script exists and is executable, (2) script creates evidence directory on failure (subprocess without `COMFYUI_DIR`), (3) health-line patterns are non-empty and syntactically valid. These run as part of the 70-test suite under `uv run pytest`.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Descriptor-Based Model Detection (Priority: P1)
@@ -336,6 +342,13 @@ equivalent ComfyUI visibility.
 - **SC-008**: Test suite covers descriptor parsing, Diffusers inference,
   reserved-folder skipping, symlink generation, idempotency, conflict
   handling, and ambiguous-folder rejection. All tests pass.
+- **SC-009**: Live runtime validation is reproducible through a single
+  documented command (`scripts/comfygo-live-validate`) that records preflight
+  status, runs sync, runs doctor, verifies required doctor health lines,
+  preserves logs in a temporary evidence directory, and exits non-zero on any
+  failed check. The validation MUST use configured environment variables
+  such as `COMFYUI_DIR` and `COMFY_CLI_DIR`; it MUST NOT depend on
+  machine-specific absolute paths in the public spec.
 
 ## Assumptions
 

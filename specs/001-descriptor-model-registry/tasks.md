@@ -132,6 +132,11 @@ description: "Task list for descriptor-model-registry feature implementation"
 - [X] T029 [US4] Run full integration test via quickstart.md — all 8 scenarios pass
 - [X] T030 [US4] Verify `comfygo doctor` passes with the model registry present
 - [X] T054 [P] [US4] Add shell-level `scripts/comfy-local doctor` verification for clean state, pending create, pending prune, and missing runtime-copy cases
+- [X] T055 [US4] Add `scripts/comfygo-live-validate` to perform live runtime
+  validation deterministically: preflight status, sync, doctor, required-output
+  checks, evidence logs, clean git status check, and non-zero failure behavior.
+- [X] T056 [US4] Add quickstart Scenario 9 for live runtime validation using
+  `scripts/comfygo-live-validate`.
 
 **Checkpoint**: All user stories complete. Full backward compatibility maintained.
 
