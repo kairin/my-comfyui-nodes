@@ -51,3 +51,9 @@ and refresh the patch from the live ComfyUI checkout.
 The local comfy-cli integration is stored as a patch under `comfy-cli-patches/`
 after it is generated. The wrapper scripts in this repo do not depend on that
 patch, so they keep working even when comfy-cli is reset or updated.
+
+Apply the patch to a local comfy-cli checkout with:
+
+```bash
+COMFY_CLI_DIR=/path/to/comfy-cli ./scripts/apply-comfy-cli-patches.sh
+```

@@ -20,7 +20,7 @@ index 1a5dfec..db0b61a 100644
  app.add_typer(pr_command.app, name="pr-cache", help="Manage PR cache.")
 diff --git a/comfy_cli/command/local_nodes.py b/comfy_cli/command/local_nodes.py
 new file mode 100644
-index 0000000..528687d
+index 0000000..60302e2
 --- /dev/null
 +++ b/comfy_cli/command/local_nodes.py
 @@ -0,0 +1,188 @@
@@ -40,7 +40,7 @@ index 0000000..528687d
 +app = typer.Typer()
 +workspace_manager = WorkspaceManager()
 +
-+DEFAULT_REPO = "~/my-comfyui-nodes"
++DEFAULT_REPO = "~/Apps/my-comfyui-nodes"
 +
 +EXCLUDED_NAMES = {
 +    ".git",
@@ -158,7 +158,7 @@ index 0000000..528687d
 +def status(
 +    repo: Annotated[
 +        str | None,
-+        typer.Option("--repo", help="Vendored node repo. Defaults to COMFY_LOCAL_NODES_REPO or ~/my-comfyui-nodes."),
++        typer.Option("--repo", help="Vendored node repo. Defaults to COMFY_LOCAL_NODES_REPO or ~/Apps/my-comfyui-nodes."),
 +    ] = None,
 +):
 +    repo_path = _resolve_repo(repo)
@@ -174,7 +174,7 @@ index 0000000..528687d
 +def sync(
 +    repo: Annotated[
 +        str | None,
-+        typer.Option("--repo", help="Vendored node repo. Defaults to COMFY_LOCAL_NODES_REPO or ~/my-comfyui-nodes."),
++        typer.Option("--repo", help="Vendored node repo. Defaults to COMFY_LOCAL_NODES_REPO or ~/Apps/my-comfyui-nodes."),
 +    ] = None,
 +    apply_patches: Annotated[
 +        bool,
@@ -196,7 +196,7 @@ index 0000000..528687d
 +def apply_patches(
 +    repo: Annotated[
 +        str | None,
-+        typer.Option("--repo", help="Vendored node repo. Defaults to COMFY_LOCAL_NODES_REPO or ~/my-comfyui-nodes."),
++        typer.Option("--repo", help="Vendored node repo. Defaults to COMFY_LOCAL_NODES_REPO or ~/Apps/my-comfyui-nodes."),
 +    ] = None,
 +    dry_run: Annotated[
 +        bool,

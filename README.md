@@ -60,6 +60,12 @@ If the comfy-cli patch is applied, you can also run:
 uv run comfy --workspace /path/to/ComfyUI local-nodes sync --repo "$PWD"
 ```
 
+Apply or re-apply the comfy-cli patch to a local comfy-cli checkout with:
+
+```bash
+COMFY_CLI_DIR=/path/to/comfy-cli ./scripts/apply-comfy-cli-patches.sh
+```
+
 ## Refresh From Upstreams
 
 Pull fresh upstream copies into this repo, then review and commit the resulting
