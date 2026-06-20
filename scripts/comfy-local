@@ -53,9 +53,11 @@ Usage:
 
 Commands:
   go                 Apply local integration where possible, sync, then launch.
+  doctor             Verify configured paths, expected nodes, and patch state.
   status             Show configured paths and patch state.
   sync               Sync vendored nodes into ComfyUI and apply ComfyUI patches.
   start              Sync, then launch ComfyUI. Defaults to localhost:8188.
+  restart            Stop comfy-cli background ComfyUI, then start it again.
   update             Run comfy update, then resync vendored nodes.
   install            Run comfy install, then resync vendored nodes.
   patch-cli          Apply comfy-cli patches to COMFY_CLI_DIR.
@@ -101,6 +103,81 @@ patch_state() {
   fi
 }
 
+expected_node_status() {
+  local source_root="$repo_dir/custom_nodes"
+  local target_root="$COMFYUI_DIR/custom_nodes"
+  local missing=0
+  local total=0
+  local source
+  local name
+
+  if [[ ! -d "$source_root" ]]; then
+    echo "Expected nodes: missing source directory $source_root"
+    return 1
+  fi
+
+  for source in "$source_root"/*; do
+    [[ -e "$source" ]] || continue
+    total=$((total + 1))
+    name="$(basename "$source")"
+    if [[ ! -e "$target_root/$name" ]]; then
+      echo "Missing expected node: $name"
+      missing=$((missing + 1))
+    fi
+  done
+
+  if (( missing == 0 )); then
+    echo "Expected nodes: $total present"
+    return 0
+  fi
+
+  echo "Expected nodes: $missing missing out of $total"
+  return 1
+}
+
+doctor() {
+  local failed=0
+
+  echo "Vendored repo: $repo_dir"
+  echo "Env source: $env_source"
+  echo "COMFYUI_DIR: ${COMFYUI_DIR:-not set}"
+  echo "COMFY_CLI_DIR: ${COMFY_CLI_DIR:-not set}"
+
+  if command -v uv >/dev/null 2>&1; then
+    echo "uv: available"
+  else
+    echo "uv: missing"
+    failed=1
+  fi
+
+  if [[ -z "${COMFYUI_DIR:-}" ]]; then
+    echo "ComfyUI: COMFYUI_DIR is not set"
+    failed=1
+  elif [[ -d "$COMFYUI_DIR" ]]; then
+    echo "ComfyUI exists: yes"
+    echo "ComfyUI Git checkout: $([[ -d "$COMFYUI_DIR/.git" ]] && echo yes || echo no)"
+    echo "ComfyUI patch: $(patch_state "$COMFYUI_DIR" "$repo_dir/comfyui-patches/comfy-sd-qwen-image-vae.patch")"
+    expected_node_status || failed=1
+  else
+    echo "ComfyUI exists: no"
+    failed=1
+  fi
+
+  if [[ -z "${COMFY_CLI_DIR:-}" ]]; then
+    echo "comfy-cli: COMFY_CLI_DIR is not set"
+    failed=1
+  elif [[ -d "$COMFY_CLI_DIR" ]]; then
+    echo "comfy-cli exists: yes"
+    echo "comfy-cli Git checkout: $([[ -d "$COMFY_CLI_DIR/.git" ]] && echo yes || echo no)"
+    echo "comfy-cli patch: $(patch_state "$COMFY_CLI_DIR" "$repo_dir/comfy-cli-patches/add-local-nodes-command.patch")"
+  else
+    echo "comfy-cli exists: no"
+    failed=1
+  fi
+
+  return "$failed"
+}
+
 ensure_comfy_cli_patch() {
   local patch="$repo_dir/comfy-cli-patches/add-local-nodes-command.patch"
 
@@ -121,10 +198,25 @@ launch_comfyui() {
   require_comfyui_dir
   require_comfy_cli_dir
   COMFYUI_DIR="$COMFYUI_DIR" "$repo_dir/scripts/install-to-comfyui.sh"
+  expected_node_status
   if [[ $# -eq 0 ]]; then
     set -- --listen 127.0.0.1 --port 8188
   fi
   cd "$COMFY_CLI_DIR"
+  exec uv run comfy --workspace "$COMFYUI_DIR" launch -- "$@"
+}
+
+restart_comfyui() {
+  require_comfyui_dir
+  require_comfy_cli_dir
+  ensure_comfy_cli_patch
+  COMFYUI_DIR="$COMFYUI_DIR" "$repo_dir/scripts/install-to-comfyui.sh"
+  expected_node_status
+  cd "$COMFY_CLI_DIR"
+  uv run comfy --workspace "$COMFYUI_DIR" stop || true
+  if [[ $# -eq 0 ]]; then
+    set -- --listen 127.0.0.1 --port 8188
+  fi
   exec uv run comfy --workspace "$COMFYUI_DIR" launch -- "$@"
 }
 
@@ -143,6 +235,10 @@ case "$command" in
     require_comfy_cli_dir
     ensure_comfy_cli_patch
     launch_comfyui "$@"
+    ;;
+
+  doctor)
+    doctor
     ;;
 
   status)
@@ -169,6 +265,10 @@ case "$command" in
 
   start|launch)
     launch_comfyui "$@"
+    ;;
+
+  restart)
+    restart_comfyui "$@"
     ;;
 
   update)

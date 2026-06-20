@@ -14,8 +14,14 @@
    comfygo
    ```
 
-2. If you edited vendored custom node files, commit the change here.
-3. Sync into the ComfyUI workspace without launching:
+2. Check the setup without launching:
+
+   ```bash
+   comfygo doctor
+   ```
+
+3. If you edited vendored custom node files, commit the change here.
+4. Sync into the ComfyUI workspace without launching:
 
    ```bash
    comfygo sync

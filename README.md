@@ -43,10 +43,27 @@ The same command also maps to the lower-level operations:
 
 ```bash
 comfygo status
+comfygo doctor
 comfygo sync
+comfygo restart
 comfygo update
 comfygo refresh-upstreams
 ```
+
+Command map:
+
+```text
+comfygo                  daily path: patch comfy-cli if possible, sync nodes, apply ComfyUI patches, verify nodes, launch
+comfygo doctor           verify paths, patches, uv, and expected custom nodes
+comfygo sync             install/update the live custom_nodes copy from this repo
+comfygo restart          restart a comfy-cli background ComfyUI, then launch
+comfygo update           update ComfyUI through comfy-cli, then resync this repo
+comfygo refresh-upstreams refresh vendored node sources from UPSTREAMS.tsv for review
+```
+
+`comfygo` does not automatically pull upstream custom-node changes on every
+launch. Use `comfygo refresh-upstreams`, review the diff, commit it, then run
+`comfygo sync` or `comfygo`.
 
 Preferred on a local machine: create an untracked `.envrc.local` file for
 machine-local paths, then allow direnv for this repo.
