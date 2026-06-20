@@ -19,6 +19,15 @@ description: "Task list template for feature implementation"
 - **[Story]**: Which user story this task belongs to (e.g., US1, US2, US3)
 - Include exact file paths in descriptions
 
+## Repository Rules For Generated Tasks
+
+- Python and comfy-cli tasks MUST use uv-first command forms: `uv run`,
+  `uv pip --python <workspace-python>`, or
+  `uv run --python <workspace-python> --no-project python ...`.
+- Do not generate tasks that use direct `pip`, `python -m pip`, or unwrapped
+  `python` workflow commands. If `uv` is unavailable, task the user to install
+  `uv` first instead of adding a fallback installer/interpreter.
+
 ## Path Conventions
 
 - **Single project**: `src/`, `tests/` at repository root

@@ -16,6 +16,7 @@ __pycache__/
 .mypy_cache/
 
 # Runtime and machine-local state.
+.hermes/
 tmp/
 temp/
 logs/
@@ -44,3 +45,6 @@ debug_*.json
 .agents/*
 !.agents/skills/
 !.agents/skills/**
+
+# Model registry generated compatibility views (runtime, disposable).
+.comfygo_views/

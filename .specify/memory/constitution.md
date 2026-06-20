@@ -1,50 +1,147 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+  Sync Impact Report — uv-first amendment
+
+  Version change: 1.0.0 → 1.1.0
+  Modified principles:
+    - VI. uv And direnv First → VI. uv First, direnv For Local Env
+  Added sections:
+    - Repository uv-first checks in agent-facing templates
+  Removed sections: (none)
+  Templates requiring updates:
+    - ✅ .specify/templates/plan-template.md — uv-first Constitution Check gate added
+    - ✅ .specify/templates/spec-template.md — uv-first policy requirement added
+    - ✅ .specify/templates/tasks-template.md — uv-first generated-task rule added
+    - ✅ .specify/templates/commands/ — directory does not exist yet
+    - ✅ docs/workflow.md — runtime direnv helper and uv-compatible workflow documented
+    - ✅ AGENTS.md — uv-first agent guidance added
+  Follow-up TODOs: none
+-->
+
+# my-comfyui-nodes Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Vendored Repo Is Source Of Truth
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+All persistent custom-node changes MUST be made in this repo first, then synced
+into the live ComfyUI `custom_nodes` directory. The live ComfyUI runtime is an
+output target, not the editing source. Direct edits inside the live ComfyUI
+`custom_nodes` directory are only temporary experiments and MUST be copied back
+into this repo before being treated as real.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### II. Explicit Upstream Refresh Only
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+`comfygo` MUST NOT automatically pull the latest upstream custom-node code
+during normal launch. Upstream updates are explicit and reviewable:
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+1. `comfygo refresh-upstreams`
+2. `git diff`
+3. `git commit`
+4. `comfygo sync`
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+"Latest" for daily use means the latest committed state in this repo, not the
+latest state from upstream creators.
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### III. Safe Daily Operation
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+The normal daily command is `comfygo`. It MAY load direnv paths, re-apply local
+patches where possible, sync vendored nodes, apply ComfyUI patches, verify
+expected nodes, and launch ComfyUI. It MUST NOT silently perform risky upstream
+upgrades, destructive deletes, or secret-dependent operations without clear user
+intent.
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+### IV. Patch Durability
+
+Local amendments to ComfyUI core and comfy-cli MUST be stored as patch files in
+this repo (`comfyui-patches/` and `comfy-cli-patches/` respectively). Runtime
+projects such as ComfyUI and comfy-cli may be overwritten by their own updates,
+so this repo MUST remain the recoverable source for local behavior. Wrapper
+scripts in `scripts/` SHOULD continue to work even when local CLI patches are
+not applied.
+
+### V. Public Repo And Secret Safety
+
+This repo is intended to be public. API tokens, model weights, personal prompts,
+runtime histories, logs, caches, machine-local paths, and credential files MUST
+NOT be committed. Machine-local configuration belongs in ignored files such as
+`.envrc.local` or `.env.local`. Public docs SHOULD prefer `COMFYUI_DIR` and
+`COMFY_CLI_DIR` instead of personal absolute paths.
+
+### VI. uv First, direnv For Local Env
+
+Python and comfy-cli operations MUST be uv-first. Use `uv run` for command
+execution, `uv pip --python <workspace-python>` for workspace dependency
+installs, and `uv run --python <workspace-python> --no-project python ...` for
+diagnostic Python that must target a workspace interpreter. Direct `python`,
+`pip`, or `python -m pip` commands MUST NOT be introduced for normal project
+work. If `uv` is missing, scripts MUST fail with an instruction to install `uv`
+instead of silently falling back to another installer or interpreter.
+
+Local environment loading SHOULD prefer `direnv`, with `.envrc` delegating to
+ignored local files where needed. Scripts MUST work from explicit environment
+variables rather than hard-coded machine assumptions. Runtime environment fixes,
+including venv-provided CUDA library paths needed by Python packages, MUST be
+exported by the wrapper before invoking `uv run`.
+
+Runtime trees outside this repo, such as `/fast/comfyui`, MAY use
+machine-local `.envrc` files generated by repo tooling. Those files MUST remain
+outside Git and MUST source ignored local env files rather than embedding
+tokens directly. Launch and restart wrappers MUST import the runtime direnv
+environment before starting ComfyUI so backend processes receive token variables
+and other runtime-local environment.
+
+### VII. Verifiable Sync And Restart Behavior
+
+Scripts that change runtime state MUST provide verifiable status through
+commands such as `comfygo doctor`, `comfygo status`, or dry-run modes where
+appropriate. Python custom-node changes require a ComfyUI backend restart.
+Browser auto-refresh MUST NOT be assumed; users may need to refresh an
+already-open ComfyUI tab manually.
+
+## Operational Constraints
+
+- Keep full vendored copies of selected custom nodes under `custom_nodes/`.
+- Keep upstream provenance in `UPSTREAMS.tsv`.
+- Keep ComfyUI core patches under `comfyui-patches/`.
+- Keep comfy-cli patches under `comfy-cli-patches/`.
+- Keep wrapper and sync scripts under `scripts/`.
+- Do not commit model files, downloaded weights, caches, logs, token files,
+  or local env files.
+- Do not add direct `pip`, `python -m pip`, or non-uv Python workflow commands
+  to scripts, specs, plans, task lists, or docs.
+
+## Development Workflow
+
+- For normal use: run `comfygo`.
+- Before trusting a machine setup: run `comfygo doctor`.
+- After editing vendored nodes or patches: commit changes, then run
+  `comfygo sync` or `comfygo`.
+- To refresh from upstreams: run `comfygo refresh-upstreams`, review
+  `git diff`, resolve conflicts, commit, then run `comfygo sync`.
+- After ComfyUI or comfy-cli updates: verify patches with `comfygo doctor`
+  and re-apply from this repo if needed.
+- When adding Python or comfy-cli commands to docs, specs, plans, tasks, or
+  scripts, use uv-first command forms.
+- Do not treat upstream refresh, runtime sync, and launch as the same
+  operation.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+The constitution takes precedence over feature specs and implementation plans.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+- Changes that weaken the Vendored Repo Is Source Of Truth, Explicit Upstream
+  Refresh Only, or Public Repo And Secret Safety principles require a MAJOR
+  version bump.
+- New operational principles (new numbered sections in Core Principles) require
+  a MINOR version bump.
+- Tightening a SHOULD into a MUST inside an existing operational principle
+  requires at least a MINOR version bump.
+- Clarifications, rewording, and non-semantic refinements require a PATCH
+  version bump.
+- Amendments MUST be documented, reviewed, and written into this file before
+  taking effect.
+- All PRs and reviews SHOULD verify compliance with this constitution.
+- Complexity introduced in plans or specs that conflicts with a principle
+  MUST be justified in a Complexity Tracking table.
+
+**Version**: 1.1.0 | **Ratified**: 2026-06-20 | **Last Amended**: 2026-06-20

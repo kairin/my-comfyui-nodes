@@ -1,9 +1,9 @@
 {
-  "ai": "codex",
+  "ai": "hermes",
   "ai_skills": true,
   "feature_numbering": "sequential",
   "here": true,
-  "integration": "codex",
+  "integration": "hermes",
   "script": "sh",
   "speckit_version": "0.11.4.dev0"
 }

@@ -20,8 +20,48 @@
    comfygo doctor
    ```
 
-3. If you edited vendored custom node files, commit the change here.
-4. Sync into the ComfyUI workspace without launching:
+   If a workflow cannot find a model you believe is installed, search by name
+   and model category:
+
+   ```bash
+   comfygo models -f Qwen-Image
+   ```
+
+   To make a full model folder visible to category-specific ComfyUI nodes
+   without copying model files:
+
+   ```bash
+   comfygo models reconcile -f Qwen-Image --apply
+   comfygo restart
+   ```
+
+   The normal `comfygo` launch and `comfygo restart` path also reconciles
+   generated model views automatically for identifiable full model folders.
+
+3. Add new HF models in canonical model folders:
+
+   ```bash
+   scripts/hf-select-download owner/model-repo \
+     --models-root "$COMFYUI_MODELS_DIR" \
+     --package-name Model-Folder-Name
+   comfygo models reconcile --apply
+   ```
+
+4. If a shell under the ComfyUI runtime root needs Hugging Face or other local
+   tokens, generate the runtime direnv scope once:
+
+   ```bash
+   comfygo runtime-envrc
+   cd /path/to/comfyui-runtime-root
+   direnv allow
+   ```
+
+   Do not commit runtime `.envrc` files from the runtime root; they are
+   machine-local state. `comfygo` imports this runtime direnv environment before
+   launching or restarting ComfyUI, so token changes require a backend restart.
+
+5. If you edited vendored custom node files, commit the change here.
+6. Sync into the ComfyUI workspace without launching:
 
    ```bash
    comfygo sync
