@@ -8,18 +8,17 @@
    direnv allow
    ```
 
-1. Edit vendored custom node files in this repository.
-2. Commit the change here.
-3. Sync into the ComfyUI workspace:
+1. Launch the current preferred setup:
 
    ```bash
-   ./scripts/comfy-local sync
+   comfygo
    ```
 
-4. Launch ComfyUI with the synced copy:
+2. If you edited vendored custom node files, commit the change here.
+3. Sync into the ComfyUI workspace without launching:
 
    ```bash
-   ./scripts/comfy-local start
+   comfygo sync
    ```
 
 ## Updating Upstream Node Code

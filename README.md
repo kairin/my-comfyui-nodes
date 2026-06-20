@@ -30,12 +30,22 @@ upstream creator repos
 
 ## Sync To ComfyUI
 
-For normal use, use the single local wrapper:
+For normal use, use the one-word launcher:
 
 ```bash
-./scripts/comfy-local status
-./scripts/comfy-local sync
-./scripts/comfy-local start
+comfygo
+```
+
+It applies local integration where possible, syncs vendored nodes, applies
+ComfyUI patches, and launches ComfyUI.
+
+The same command also maps to the lower-level operations:
+
+```bash
+comfygo status
+comfygo sync
+comfygo update
+comfygo refresh-upstreams
 ```
 
 Preferred on a local machine: create an untracked `.envrc.local` file for
@@ -50,7 +60,9 @@ COMFY_CLI_DIR=/path/to/comfy-cli
 direnv allow
 ```
 
-The wrapper also falls back to `.env.local` if direnv is not available.
+The repo `.envrc` adds `scripts/` to `PATH`, so `comfygo` is available when
+direnv has loaded this repo. The wrapper also falls back to `.env.local` if
+direnv is not available.
 
 The lower-level sync script is still available:
 

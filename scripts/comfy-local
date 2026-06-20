@@ -52,6 +52,7 @@ Usage:
   scripts/comfy-local <command> [args...]
 
 Commands:
+  go                 Apply local integration where possible, sync, then launch.
   status             Show configured paths and patch state.
   sync               Sync vendored nodes into ComfyUI and apply ComfyUI patches.
   start              Sync, then launch ComfyUI. Defaults to localhost:8188.
@@ -100,6 +101,33 @@ patch_state() {
   fi
 }
 
+ensure_comfy_cli_patch() {
+  local patch="$repo_dir/comfy-cli-patches/add-local-nodes-command.patch"
+
+  if [[ ! -f "$patch" || ! -d "$COMFY_CLI_DIR/.git" ]]; then
+    return
+  fi
+
+  if git -C "$COMFY_CLI_DIR" apply --reverse --check "$patch" >/dev/null 2>&1; then
+    echo "comfy-cli patch: applied"
+  elif git -C "$COMFY_CLI_DIR" apply --check "$patch" >/dev/null 2>&1; then
+    COMFY_CLI_DIR="$COMFY_CLI_DIR" "$repo_dir/scripts/apply-comfy-cli-patches.sh"
+  else
+    echo "comfy-cli patch: does not apply cleanly; continuing with wrapper launch" >&2
+  fi
+}
+
+launch_comfyui() {
+  require_comfyui_dir
+  require_comfy_cli_dir
+  COMFYUI_DIR="$COMFYUI_DIR" "$repo_dir/scripts/install-to-comfyui.sh"
+  if [[ $# -eq 0 ]]; then
+    set -- --listen 127.0.0.1 --port 8188
+  fi
+  cd "$COMFY_CLI_DIR"
+  exec uv run comfy --workspace "$COMFYUI_DIR" launch -- "$@"
+}
+
 command="${1:-help}"
 if [[ $# -gt 0 ]]; then
   shift
@@ -108,6 +136,13 @@ fi
 case "$command" in
   help|-h|--help)
     usage
+    ;;
+
+  go)
+    require_comfyui_dir
+    require_comfy_cli_dir
+    ensure_comfy_cli_patch
+    launch_comfyui "$@"
     ;;
 
   status)
@@ -133,14 +168,7 @@ case "$command" in
     ;;
 
   start|launch)
-    require_comfyui_dir
-    require_comfy_cli_dir
-    COMFYUI_DIR="$COMFYUI_DIR" "$repo_dir/scripts/install-to-comfyui.sh"
-    if [[ $# -eq 0 ]]; then
-      set -- --listen 127.0.0.1 --port 8188
-    fi
-    cd "$COMFY_CLI_DIR"
-    exec uv run comfy --workspace "$COMFYUI_DIR" launch -- "$@"
+    launch_comfyui "$@"
     ;;
 
   update)
