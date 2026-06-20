@@ -8,7 +8,76 @@ import pathlib
 import subprocess
 import sys
 
+
+def _run_registry_subprocess(
+    *,
+    models_dir: pathlib.Path,
+    legacy_file: pathlib.Path,
+    extra_env: dict[str, str] | None = None,
+) -> dict[str, object]:
+    repo_dir = pathlib.Path(__file__).resolve().parents[3]
+    code = r'''
+import json
+import pathlib
+import sys
+import types
+
+models_dir = pathlib.Path(sys.argv[1])
+legacy_file = pathlib.Path(sys.argv[2])
+
+folder_paths = types.ModuleType("folder_paths")
+folder_paths.models_dir = str(models_dir)
+
+calls = []
+
+
+def add_model_folder_path(category, path):
+    calls.append((category, path))
+
+
+folder_paths.add_model_folder_path = add_model_folder_path
+sys.modules["folder_paths"] = folder_paths
+
+import custom_nodes.comfygo_model_registry  # noqa: F401
+
+print(
+    json.dumps(
+        {
+            "legacy_exists": legacy_file.exists(),
+            "legacy_contents": legacy_file.read_text(encoding="utf-8")
+            if legacy_file.exists()
+            else None,
+            "registered_categories": sorted(set(calls)),
+        }
+    )
+)
+'''
+
+    env = os.environ.copy()
+    env["PYTHONPATH"] = (
+        str(repo_dir)
+        if not env.get("PYTHONPATH")
+        else f"{repo_dir}{os.pathsep}{env['PYTHONPATH']}"
+    )
+    env["COMFYGO_MODEL_REGISTRY_AUTORUN"] = "1"
+    if extra_env:
+        env.update(extra_env)
+
+    proc = subprocess.run(
+        [sys.executable, "-c", code, str(models_dir), str(legacy_file)],
+        cwd=repo_dir,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+
+    last_line = proc.stdout.strip().splitlines()[-1]
+    return json.loads(last_line)
+
 from custom_nodes.comfygo_model_registry import cli
+from custom_nodes.comfygo_model_registry import compat_views
 from custom_nodes.comfygo_model_registry import scanner
 
 
@@ -188,3 +257,33 @@ print(json.dumps({
     assert proc.returncode == 0, proc.stderr
     observed = json.loads(proc.stdout)
     assert observed == {"registry_called": False, "views_exist": False}
+
+
+def test_startup_registry_reconcile_preserves_legacy_category_payloads(
+    tmp_path: pathlib.Path,
+) -> None:
+    models_dir = tmp_path / "models"
+    package = models_dir / "ActiveModel"
+    package.mkdir(parents=True)
+    (package / "model_index.json").write_text("{}", encoding="utf-8")
+    (package / "transformer").mkdir()
+
+    legacy_file = (
+        models_dir / "diffusion_models" / "LegacyModel" / "legacy.safetensors"
+    )
+    legacy_file.parent.mkdir(parents=True)
+    legacy_file.write_text("legacy payload", encoding="utf-8")
+
+    observed = _run_registry_subprocess(
+        models_dir=models_dir,
+        legacy_file=legacy_file,
+        extra_env={"COMFYGO_MODEL_REGISTRY_AUTORUN": "1"},
+    )
+
+    assert observed["legacy_exists"] is True
+    assert observed["legacy_contents"] == "legacy payload"
+    expected_category = [
+        "diffusion_models",
+        str(compat_views.views_root(models_dir) / "diffusion_models"),
+    ]
+    assert expected_category in observed["registered_categories"]

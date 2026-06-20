@@ -9,7 +9,7 @@
 - Keep machine-local configuration in ignored files such as `.envrc.local` or
   `.env.local`; do not commit tokens, model weights, local prompts, logs, or
   runtime histories.
-- If token/env loading is needed from `/fast/comfyui` paths, use
+- If token/env loading is needed from runtime ComfyUI paths, use
   `comfygo runtime-envrc` to create the machine-local runtime `.envrc`; do not
   hand-code secrets into runtime directories.
 

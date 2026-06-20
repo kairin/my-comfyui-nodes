@@ -44,8 +44,8 @@ Place the second project `llama.cpp\` in the `llama-cpp-python\vendor\` folder
 - `image`, `image2`, `image3`: *IMAGE* - analyzed images, you can use up to 3 images. For example, you can instruct Qwen to combine all the images into one scene, and it will do so. You can also not include any images and use the model simply as a text LLM.
 - `system prompt`: *STRING*, default: "You are a highly accurate vision-language assistant. Provide detailed, precise, and well-structured image descriptions." - role + rules + format.
 - `user prompt`: *STRING*, default: "Describe this image" - specific case + input data + variable wishes.
-- `model_path`: *STRING*, default: `H:\Qwen3VL-8B-Instruct-Q8_0.gguf` - The path to the model is written here
-- `mmproj_path`: *STRING*, default: `H:\mmproj-Qwen3VL-8B-Instruct-F16.gguf` - The path to the mmproj model is written here; it is required and usually located in the same place as the model.
+- `model_path`: *STRING*, default: `$COMFYUI_MODELS_DIR/Qwen3VL-8B-Instruct-Q8_0.gguf` - The path to the model is written here
+- `mmproj_path`: *STRING*, default: `$COMFYUI_MODELS_DIR/mmproj-Qwen3VL-8B-Instruct-F16.gguf` - The path to the mmproj model is written here; it is required and usually located in the same place as the model.
 - `output_max_tokens`: *INT*, default: 2048, min: 64, max: 4096 - The max number of tokens to output. A smaller number saves memory, but may result in a truncated response.
 - `image_max_tokens`: *INT*, default: 4096, min: 1024, max: 1024000 - The max number of tokens to image. A smaller number saves memory, but the image requires a lot of tokens, so you can't set them too few. 
 - `ctx`: *INT*, default: 8192, min: 0, max: 1024000. - A smaller number saves memory.
@@ -115,8 +115,8 @@ My parameter for `ministral`:
 
 ```
         "Ministral-3-14B": {
-            "model_path": "H:\\LLM2\\Ministral-3-14B-Instruct-2512-Q4_K_M\\Ministral-3-14B-Instruct-2512-Q4_K_M.gguf",
-            "mmproj_path": "H:\\LLM2\\Ministral-3-14B-Instruct-2512-Q4_K_M\\Ministral-3-14B-Instruct-2512-BF16-mmproj.gguf",
+            "model_path": "$COMFYUI_MODELS_DIR/Ministral-3-14B-Instruct-2512-Q4_K_M.gguf",
+            "mmproj_path": "$COMFYUI_MODELS_DIR/Ministral-3-14B-Instruct-2512-BF16-mmproj.gguf",
             "output_max_tokens": 1024,
             "image_max_tokens": 2048,
             "ctx": 4096,
@@ -210,7 +210,7 @@ except Exception as e2:
 ```
 Run it using your embedded python from the `python_embeded` folder :
 ```
-H:\ComfyUI128\python_embeded>python temp\test.py
+$COMFYUI_RUNTIME_DIR/python_embeded>python temp/test.py
 llama-cpp-python version: 0.3.17
 ggml_cuda_init: GGML_CUDA_FORCE_MMQ:    no
 ggml_cuda_init: GGML_CUDA_FORCE_CUBLAS: no

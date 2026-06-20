@@ -10,8 +10,8 @@
     },
     "_model_presets": {
         "Qwen3-VL-8B": {
-            "model_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0.gguf",
-            "mmproj_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0\\Qwen3-VL-8B-Instruct-abliterated-v2.0.mmproj-Q8_0.gguf",
+            "model_path": "$COMFYUI_MODELS_DIR/Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0.gguf",
+            "mmproj_path": "$COMFYUI_MODELS_DIR/Qwen3-VL-8B-Instruct-abliterated-v2.0.mmproj-Q8_0.gguf",
             "output_max_tokens": 2048,
             "image_max_tokens": 4096,
             "ctx": 8192,
@@ -25,8 +25,8 @@
             "script": "qwen3vl_run.py"
         },
         "Qwen3-VL-30B": {
-            "model_path": "H:\\LLM2\\Qwen3-VL-30B-A3B-Instruct-Q4_K_S\\Qwen3-VL-30B-A3B-Instruct-Q4_K_S.gguf",
-            "mmproj_path": "H:\\LLM2\\Qwen3-VL-30B-A3B-Instruct-Q4_K_S\\mmproj-BF16.gguf",
+            "model_path": "$COMFYUI_MODELS_DIR/Qwen3-VL-30B-A3B-Instruct-Q4_K_S.gguf",
+            "mmproj_path": "$COMFYUI_MODELS_DIR/mmproj-BF16.gguf",
             "output_max_tokens": 2048,
             "image_max_tokens": 4096,
             "ctx": 8192,
@@ -40,8 +40,8 @@
             "script": "qwen3vl_run.py"
         },
         "Joycaption-Beta": {
-            "model_path": "H:\\LLM2\\llama-joycaption-beta-one-hf-llava-q8_0\\llama-joycaption-beta-one-hf-llava-q8_0.gguf",
-            "mmproj_path": "H:\\LLM2\\llama-joycaption-beta-one-hf-llava-q8_0\\llama-joycaption-beta-one-llava-mmproj-model-f16.gguf",
+            "model_path": "$COMFYUI_MODELS_DIR/llama-joycaption-beta-one-hf-llava-q8_0.gguf",
+            "mmproj_path": "$COMFYUI_MODELS_DIR/llama-joycaption-beta-one-llava-mmproj-model-f16.gguf",
             "output_max_tokens": 1024,
             "image_max_tokens": 2048,
             "ctx": 4096,

@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! command -v uv >/dev/null 2>&1; then
+	echo "uv is required to run this helper. Install uv first." >&2
+	exit 1
+fi
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_dir="$(cd "$script_dir/.." && pwd)"
+python_exe="$repo_dir/.venv/bin/python"
+
+if [ -x "$python_exe" ]; then
+	exec uv run --python "$python_exe" --no-project "$repo_dir/scripts/hf_select_download.py" "$@"
+fi
+
+exec uv run --no-project "$repo_dir/scripts/hf_select_download.py" "$@"

@@ -186,7 +186,7 @@
         "widget_ue_connectable": {}
       },
       "widgets_values": [
-        "O:\\Outputs\\ailab.png",
+        "$COMFYUI_OUTPUT_DIR/sample.png",
         "",
         "image"
       ],

@@ -19,8 +19,8 @@ class Qwen3VL_GGUF_Node:
             "required": {
                 "system_prompt": ("STRING", {"multiline": False, "default": "You are a highly accurate vision-language assistant. Provide detailed, precise, and well-structured image descriptions."}),
                 "user_prompt": ("STRING", {"multiline": True, "default": "Describe this image."}),
-                "model_path": ("STRING", {"default": "H:\\Qwen3VL-8B-Instruct-Q8_0.gguf"}),
-                "mmproj_path": ("STRING", {"default": "H:\\mmproj-Qwen3VL-8B-Instruct-F16.gguf"}),
+                "model_path": ("STRING", {"default": "$COMFYUI_MODELS_DIR/Qwen3VL-8B-Instruct-Q8_0.gguf"}),
+                "mmproj_path": ("STRING", {"default": "$COMFYUI_MODELS_DIR/mmproj-Qwen3VL-8B-Instruct-F16.gguf"}),
                 "output_max_tokens": ("INT", {"default": 2048, "min": 64, "max": 4096, "step": 64}),
                 "image_max_tokens": ("INT", {"default": 4096, "min": 1024, "max": 1024000, "step": 512}),
                 "ctx": ("INT", {"default": 8192, "min": 1024, "max": 1024000, "step": 512}),

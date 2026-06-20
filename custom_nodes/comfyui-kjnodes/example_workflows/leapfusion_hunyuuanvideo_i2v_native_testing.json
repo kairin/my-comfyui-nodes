@@ -647,7 +647,7 @@
             "format": "video/h264-mp4",
             "frame_rate": 24,
             "workflow": "hyvidcomfy_00001.png",
-            "fullpath": "N:\\AI\\ComfyUI\\temp\\hyvidcomfy_00001.mp4"
+            "fullpath": "$COMFYUI_TEMP_DIR/example.mp4"
           },
           "muted": false
         }

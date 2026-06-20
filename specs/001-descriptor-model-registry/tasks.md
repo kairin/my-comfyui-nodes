@@ -122,6 +122,8 @@ description: "Task list for descriptor-model-registry feature implementation"
 ### Tests for User Story 4
 
 - [X] T026 [P] [US4] Write test for legacy `diffusers/` path detection: model under `models/diffusers/name/` is detected the same as under `models/name/` in `custom_nodes/comfygo_model_registry/tests/test_scanner.py`
+- [X] T052 [P] [US4] Add explicit SC-004 verification: reconcile `--apply` creates symlinks only under `.comfygo_views` and does not copy/move any model files
+- [X] T053 [P] [US4] Add explicit SC-006 verification: legacy category payload files remain unchanged after reconcile/startup operations
 
 ### Implementation for User Story 4
 
@@ -129,6 +131,7 @@ description: "Task list for descriptor-model-registry feature implementation"
 - [X] T028 [US4] Write verification: all tests pass with `uv run pytest -v`
 - [X] T029 [US4] Run full integration test via quickstart.md — all 8 scenarios pass
 - [X] T030 [US4] Verify `comfygo doctor` passes with the model registry present
+- [X] T054 [P] [US4] Add shell-level `scripts/comfy-local doctor` verification for clean state, pending create, pending prune, and missing runtime-copy cases
 
 **Checkpoint**: All user stories complete. Full backward compatibility maintained.
 

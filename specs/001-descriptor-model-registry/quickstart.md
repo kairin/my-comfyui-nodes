@@ -33,7 +33,7 @@ direnv allow   # if not already done
 2. Configure the model root to include the test directory and run the scanner:
 
    ```bash
-   uv run python -c "
+   COMFYGO_MODEL_REGISTRY_AUTORUN=0 uv run python -c "
    from custom_nodes.comfygo_model_registry.scanner import scan_models
    packages = scan_models('$TEST_DIR')
    for p in packages:
@@ -135,7 +135,7 @@ direnv allow   # if not already done
 2. Run scan:
 
    ```bash
-   uv run python -c "
+   COMFYGO_MODEL_REGISTRY_AUTORUN=0 uv run python -c "
    from custom_nodes.comfygo_model_registry.scanner import scan_models
    packages = scan_models('$TEST_DIR')
    ambiguous = [p for p in packages if p.ambiguous]

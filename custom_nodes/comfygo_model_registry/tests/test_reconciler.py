@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
 import pathlib
 
 from custom_nodes.comfygo_model_registry import models
 from custom_nodes.comfygo_model_registry import reconciler
 from custom_nodes.comfygo_model_registry import compat_views
+
+
+def _sha256(path: pathlib.Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _make_package(
@@ -78,6 +83,83 @@ class TestReconcileApply:
         )
         assert link.is_symlink()
         assert link.resolve() == (tmp_path / "MyModel" / "transformer").resolve()
+
+    def test_apply_creates_only_symlinks_under_views_root(
+        self,
+        tmp_path: pathlib.Path,
+    ) -> None:
+        """Apply mode writes only symlink entries under .comfygo_views."""
+        package = _make_package(
+            "SmokeModel",
+            tmp_path,
+            [
+                ("transformer", ["diffusion_models"]),
+                ("text_encoder", ["text_encoders"]),
+                ("vae", ["vae"]),
+            ],
+        )
+
+        manifest = package.path / "README.md"
+        manifest.write_text("original payload", encoding="utf-8")
+        manifest_hash = _sha256(manifest)
+
+        report = reconciler.reconcile([package], tmp_path, dry_run=False)
+
+        assert len(report.views_created) == 3
+
+        vroot = compat_views.views_root(tmp_path)
+        assert vroot.is_dir()
+        expected_links = [
+            vroot / "diffusion_models" / "SmokeModel" / "transformer",
+            vroot / "text_encoders" / "SmokeModel" / "text_encoder",
+            vroot / "vae" / "SmokeModel" / "vae",
+        ]
+        for link in expected_links:
+            assert link.is_symlink()
+
+        # No regular files should be introduced under .comfygo_views during apply.
+        regular_files = [
+            path
+            for path in vroot.rglob("*")
+            if path.is_file() and not path.is_symlink()
+        ]
+        assert regular_files == []
+
+        # Source package payload remains in the package folder.
+        assert manifest.exists()
+        assert _sha256(manifest) == manifest_hash
+
+    def test_reconcile_apply_preserves_legacy_category_payloads(
+        self,
+        tmp_path: pathlib.Path,
+    ) -> None:
+        """Legacy category payload files are not altered by reconcile."""
+        models_dir = tmp_path / "models"
+        package = _make_package(
+            "PrimaryModel",
+            models_dir,
+            [("transformer", ["diffusion_models"])],
+        )
+
+        legacy_category = models_dir / "diffusion_models"
+        legacy_model = legacy_category / "LegacyModel"
+        legacy_model.mkdir(parents=True)
+        legacy_file = legacy_model / "old.safetensors"
+        legacy_file.write_text("legacy payload", encoding="utf-8")
+        legacy_hash = _sha256(legacy_file)
+
+        reconciler.reconcile([package], models_dir, dry_run=False)
+
+        assert (
+            models_dir
+            / ".comfygo_views"
+            / "diffusion_models"
+            / "PrimaryModel"
+            / "transformer"
+        ).is_symlink()
+        assert legacy_file.exists()
+        assert legacy_file.read_text(encoding="utf-8") == "legacy payload"
+        assert _sha256(legacy_file) == legacy_hash
 
     def test_idempotency(self, tmp_path: pathlib.Path) -> None:
         """Re-running apply must produce identical state without errors."""
