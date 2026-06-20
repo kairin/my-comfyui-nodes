@@ -39,3 +39,8 @@ custom_models.json
 system_prompts_user.json
 debug_config.json
 debug_*.json
+
+# Track Spec Kit skills, but keep future agent runtime/auth state out of Git.
+.agents/*
+!.agents/skills/
+!.agents/skills/**
