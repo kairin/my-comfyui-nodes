@@ -48,6 +48,103 @@
    ```
 
 4. If a shell under the ComfyUI runtime root needs Hugging Face or other local
+
+## Local Quality Gates (Mandatory Before Commit/Push)
+
+**Goal**: Ensure code passes Codacy *before* it ever leaves your machine. This prevents sloppy commits, failed merges, wasted GitHub Actions minutes, and Codacy token usage.
+
+### Setup (one time)
+```bash
+# Install pre-commit (uv-first)
+uv tool install pre-commit
+pre-commit install   # installs git hooks
+
+# Make the full verifier executable (already done in repo)
+chmod +x scripts/verify-quality.sh
+```
+
+### Daily workflow
+1. Make your changes.
+2. **Before committing**, the pre-commit hooks will run on `git commit`:
+   - Ruff (lint + format)
+   - ShellCheck (for scripts/)
+   - Bandit (security)
+   - Relevant tests
+   - Basic hygiene
+3. Additionally (or if hooks skipped), run the full local verifier that closely matches what Codacy will execute:
+   ```bash
+   ./scripts/verify-quality.sh
+   ```
+4. Only if the above passes:
+   ```bash
+   git commit -m "..."
+   git push
+   ```
+5. CI (Codacy) will then run as the final safety net (should be green).
+
+### What the verifier checks (Codacy-equivalent)
+- Ruff (primary Python linter/formatter we have enabled in Codacy)
+- ShellCheck
+- Bandit security
+- Registry tests
+- Codacy CLI partial scan (when possible)
+- Other hygiene
+
+If this script passes locally, the Codacy workflow in CI should pass.
+
+**Never push code that fails the local verifier.** If you do, you'll see the same failures (or worse) in the PR and waste resources.
+
+See also:
+- `.pre-commit-config.yaml`
+- `scripts/verify-quality.sh`
+- `AGENTS.md` (Quality Gates section)
+- Constitution Principle on verifiable behavior
+
+## Solo Maintainer: Good-Enough Branch Protection & Safety Nets
+
+This project is maintained by a single developer. Overly strict rules (multiple required human reviews) would be overkill and block work.
+
+**Recommended "good enough" baseline (see GitHub branch protection on `main` + Codacy Gate Policy):**
+
+- Require pull requests before merging to `main` (no direct pushes).
+- Require status checks to pass (at minimum the Codacy Analysis check from `.github/workflows/codacy-analysis.yml`).
+- Required approving reviews: 0 (self-approval by owner is acceptable).
+- Require branches to be up-to-date before merging.
+- Require conversation resolution on PRs.
+- Block force pushes and branch deletions: enabled.
+- Enforce admin restrictions: off (solo flexibility).
+- Linear history: optional.
+
+**Codacy side:**
+- Gate Policy + key tools (Bandit, Pylint/Prospector, ShellCheck, Trivy/Checkov, markdownlint, etc.) stay enabled.
+- The analysis check is required (catches issues early via PR feedback).
+- Grade and goals are guidance/visibility tools. Do not make low grade a hard merge blocker while solo (adjust if the project grows).
+- Use issues and the gate for technical debt tracking.
+
+These provide real safety nets (CI must run, can't silently break main) without slowing a solo maintainer.
+
+Related issues: #95 (protection), and tasks T004/T005 in `specs/004-comfygo-patched-tmux/tasks.md`.
+
+See also the updated constitution (Principles VIII + IX) and root `CHANGELOG.md`.
+
+## Protection Verification (as of 2026-06-21, updated on feature branch)
+
+Current GitHub main protection (from `gh api`):
+- required_pull_request_reviews: 0 (self-approval allowed), dismiss_stale_reviews: true, conversation_resolution: true
+- required_status_checks: strict=true, contexts=["analysis"]
+- enforce_admins: false, allow_force_pushes: false, allow_deletions: false, required_linear_history: false
+
+Matches "good enough" solo baseline in constitution IX and task T004/T005.
+
+- Codacy: Gate Policy active, analysis check required in GitHub. Grade/goals for visibility only.
+
+See related: constitution Principles VIII + IX, tasks T004/T005/T034 in 004, issue #95.
+
+Run `gh api repos/kairin/my-comfyui-nodes/branches/main/protection` or `comfygo doctor --protection` (to be added in T007) for checks.
+
+## Changelog Maintenance
+
+See root `CHANGELOG.md`. All user-facing and significant changes are recorded there per constitution Principle VIII.
    tokens, generate the runtime direnv scope once:
 
    ```bash
@@ -108,3 +205,14 @@ Apply the patch to a local comfy-cli checkout with:
 ```bash
 COMFY_CLI_DIR=/path/to/comfy-cli ./scripts/apply-comfy-cli-patches.sh
 ```
+
+## Issue Reporting
+
+Use `.github/ISSUE_TEMPLATE/` for bug reports and feature requests.
+
+When filing, reference:
+- Relevant tasks from `specs/004-comfygo-patched-tmux/tasks.md`
+- Constitution principles (e.g. VIII Changelog, IX Branch Protection, I Vendored Source of Truth)
+- Confirmation that quality gates were run (`./scripts/verify-quality.sh` green)
+
+This supports solo-maintainer protections and clear tracking for the 004 feature (patching, tmux launch, enrichment).

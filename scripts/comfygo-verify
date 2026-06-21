@@ -1,0 +1,508 @@
+#!/usr/bin/env bash
+# comfygo-verify — single entry point for all automatable checks.
+#
+# Phases:
+#   1. Pre-flight   — git status, shell syntax, whitespace
+#   2. Repo tests   — uv run pytest (full suite)
+#   3. GC doctor    — 16 GCD scenarios in isolated temp root
+#   4. Live validate — delegates to comfygo-live-validate (optional)
+#
+# Usage:
+#   scripts/comfygo-verify                    # all phases (default)
+#   scripts/comfygo-verify --fast             # skip GC doctor + live
+#   scripts/comfygo-verify --help             # show this help
+#
+# Environment:
+#   COMFYUI_DIR   — set to run live validation phase
+#   COMFY_CLI_DIR — passed through to live-validate
+#
+# Exit codes:
+#   0 — all checks passed
+#   1 — one or more checks failed
+
+set -u
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+usage() {
+    cat <<EOF
+Usage:
+  scripts/comfygo-verify [--fast] [--help]
+
+Options:
+  --fast      Run pre-flight and repository tests only; skip GC doctor and live validation.
+  -h, --help  Show this help.
+
+Environment:
+  COMFYUI_DIR   Set to run live validation phase.
+  COMFY_CLI_DIR Passed through to live validation.
+EOF
+}
+
+skip_gc=false
+skip_live=false
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --fast)
+            skip_gc=true
+            skip_live=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "error: unknown argument: $1" >&2
+            usage >&2
+            exit 2
+            ;;
+    esac
+done
+
+# ── Evidence directory ──────────────────────────────────────────────
+run_dir="$(mktemp -d /tmp/comfygo-verify.XXXXXX)" || {
+    echo "FATAL: could not create evidence directory" >&2
+    exit 1
+}
+echo "Evidence: $run_dir"
+
+# ── Fail accumulator ────────────────────────────────────────────────
+failed=0
+current_phase="setup"
+declare -A phase_pass_counts=()
+declare -A phase_fail_counts=()
+declare -A phase_skip_counts=()
+
+increment_phase_count() {
+    local bucket="$1"
+    local phase="$current_phase"
+    case "$bucket" in
+        pass)
+            phase_pass_counts[$phase]=$((${phase_pass_counts[$phase]:-0} + 1))
+            ;;
+        fail)
+            phase_fail_counts[$phase]=$((${phase_fail_counts[$phase]:-0} + 1))
+            ;;
+        skip)
+            phase_skip_counts[$phase]=$((${phase_skip_counts[$phase]:-0} + 1))
+            ;;
+    esac
+}
+
+start_phase() {
+    current_phase="$1"
+    local title="$2"
+    echo ""
+    echo "--- $title ---"
+}
+
+record_pass() {
+    local msg="$1"
+    echo "  PASS: $msg"
+    increment_phase_count pass
+}
+
+record_skip() {
+    local msg="$1"
+    echo "  SKIP: $msg"
+    increment_phase_count skip
+}
+
+record_fail() {
+    local msg="$1"
+    echo "  FAIL: $msg"
+    failed=1
+    increment_phase_count fail
+}
+
+print_phase_summary() {
+    echo ""
+    echo "--- Summary ---"
+    for phase in phase1 phase2 phase3 phase4; do
+        local label
+        case "$phase" in
+            phase1) label="Pre-flight" ;;
+            phase2) label="Repository tests" ;;
+            phase3) label="GC doctor" ;;
+            phase4) label="Live validation" ;;
+        esac
+        echo "  $label: ${phase_pass_counts[$phase]:-0} pass, ${phase_fail_counts[$phase]:-0} fail, ${phase_skip_counts[$phase]:-0} skip"
+    done
+}
+
+# ── Phase 1: Pre-flight ─────────────────────────────────────────────
+start_phase "phase1" "Phase 1: Pre-flight"
+
+# 1a: git status --porcelain must be clean
+pre_git_log="$run_dir/git-status-before.log"
+preflight_git_clean=true
+if git -C "$REPO_DIR" status --porcelain=v1 --untracked-files=all \
+    > "$pre_git_log" 2>&1; then
+    if [ -s "$pre_git_log" ]; then
+        preflight_git_clean=false
+        record_fail "repo is dirty — clean it first"
+        cat "$pre_git_log"
+    else
+        record_pass "git status clean"
+    fi
+else
+    preflight_git_clean=false
+    record_fail "git status failed"
+fi
+
+# 1b: bash -n on all shell scripts in scripts/
+shell_syntax_ok=true
+for script in \
+    "$SCRIPT_DIR"/*.sh \
+    "$SCRIPT_DIR/comfygo-verify" \
+    "$SCRIPT_DIR/comfygo-live-validate" \
+    "$SCRIPT_DIR/comfy-local"
+do
+    [ -f "$script" ] || continue
+    if bash -n "$script" 2>/dev/null; then
+        :  # OK
+    else
+        shell_syntax_ok=false
+        record_fail "bash -n $script failed"
+    fi
+done
+if [ "$shell_syntax_ok" = true ]; then
+    record_pass "all shell scripts pass bash -n"
+fi
+
+# 1c: git diff --check
+if git -C "$REPO_DIR" diff --check 2>/dev/null; then
+    record_pass "git diff --check clean"
+else
+    record_fail "whitespace/merge conflicts in working tree"
+fi
+
+# 1d: no tracked pycache/bytecode artifacts
+tracked_pycache_log="$run_dir/tracked-pycache.log"
+git -C "$REPO_DIR" ls-files \
+    '*/__pycache__/*' \
+    '*.pyc' \
+    '*.pyo' \
+    > "$tracked_pycache_log"
+if [ -s "$tracked_pycache_log" ]; then
+    record_fail "tracked Python cache artifacts found"
+    cat "$tracked_pycache_log"
+else
+    record_pass "no tracked Python cache artifacts"
+fi
+
+# ── Phase 2: Repository tests ───────────────────────────────────────
+start_phase "phase2" "Phase 2: Repository tests"
+
+test_log="$run_dir/pytest.log"
+if UV_CACHE_DIR="${UV_CACHE_DIR:-/tmp/uv-cache}" \
+    uv run pytest custom_nodes/comfygo_model_registry/tests \
+    -q --tb=line > "$test_log" 2>&1; then
+    passed=$(grep -oP '^\d+(?= passed)' "$test_log" || echo "?")
+    record_pass "$passed test(s) passed"
+else
+    record_fail "pytest suite failed"
+    echo "--- last 15 lines of pytest output ---"
+    tail -15 "$test_log"
+fi
+
+# ── Phase 3: GC doctor (temp-root, 16 GCD scenarios) ────────────────
+start_phase "phase3" "Phase 3: GC doctor"
+
+gc_log="$run_dir/gc-doctor.log"
+gc_ok=true
+MODELS_DIR=""
+WRAPPER="$SCRIPT_DIR/comfygo-models.sh"
+RUN_RC=0
+RUN_OUT="$run_dir/gc-last.out"
+
+write_gc_result() {
+    local gcd_id="$1"
+    local result="$2"  # PASS or FAIL
+    local detail="$3"
+    echo "  $result: $gcd_id — $detail" | tee -a "$gc_log"
+    if [ "$result" = "PASS" ]; then
+        increment_phase_count pass
+    else
+        gc_ok=false
+        failed=1
+        increment_phase_count fail
+    fi
+}
+
+cleanup_models_dir() {
+    if [ -n "${MODELS_DIR:-}" ] && [ -d "$MODELS_DIR" ]; then
+        rm -rf "$MODELS_DIR"
+    fi
+}
+
+reset_models_dir() {
+    rm -rf "$MODELS_DIR"
+    mkdir -p "$MODELS_DIR"
+}
+
+run_gcd_cmd() {
+    local gcd_id="$1"
+    shift
+    RUN_OUT="$run_dir/${gcd_id}.out"
+    "$@" > "$RUN_OUT" 2>&1
+    RUN_RC=$?
+}
+
+output_has() {
+    grep -Fq -- "$1" "$RUN_OUT"
+}
+
+output_lacks() {
+    ! grep -Fq -- "$1" "$RUN_OUT"
+}
+
+output_exact() {
+    local expected="$1"
+    local expected_file="$run_dir/expected-output.txt"
+    printf '%s\n' "$expected" > "$expected_file"
+    cmp -s "$RUN_OUT" "$expected_file"
+}
+
+output_summary() {
+    tr '\n' '|' < "$RUN_OUT" | sed 's/|$//'
+}
+
+trash_absent() {
+    [ ! -e "$MODELS_DIR/.comfygo_trash" ]
+}
+
+if [ "$skip_gc" = true ]; then
+    record_skip "--fast requested; GC doctor skipped"
+elif [ ! -x "$WRAPPER" ]; then
+    record_fail "scripts/comfygo-models.sh not found or not executable"
+else
+    MODELS_DIR="$(mktemp -d /tmp/comfygo-gc-doctor.XXXXXX)"
+    gc_today="$(date +%F)"
+
+    # Cleanup temp root on exit.
+    trap cleanup_models_dir EXIT
+    trap 'cleanup_models_dir; exit 1' INT TERM
+
+    # GCD-001: Empty root
+    reset_models_dir
+    run_gcd_cmd "GCD-001" "$WRAPPER" --models-dir "$MODELS_DIR" gc
+    if [ "$RUN_RC" -eq 0 ] && output_exact "Nothing to report." && trash_absent; then
+        write_gc_result "GCD-001" "PASS" "empty root -> exit 0, exact empty report, no trash"
+    else
+        write_gc_result "GCD-001" "FAIL" "exit=$RUN_RC output=$(output_summary)"
+    fi
+
+    # GCD-002: Managed downloader
+    mkdir -p "$MODELS_DIR/ManagedDownloader"
+    printf '{"schema":"comfygo.download.v1","repo":"example/m"}\n' \
+        > "$MODELS_DIR/ManagedDownloader/.comfygo-download.json"
+    run_gcd_cmd "GCD-002" "$WRAPPER" --models-dir "$MODELS_DIR" gc
+    if [ "$RUN_RC" -eq 0 ] && output_has "marker: downloader" && trash_absent; then
+        write_gc_result "GCD-002" "PASS" "managed downloader detected, no trash"
+    else
+        write_gc_result "GCD-002" "FAIL" "exit=$RUN_RC output=$(output_summary)"
+    fi
+
+    # GCD-003: Managed descriptor
+    mkdir -p "$MODELS_DIR/ManagedDescriptor"
+    printf '{"schema":"comfygo.model.v1","name":"x","kind":"diffusers"}\n' \
+        > "$MODELS_DIR/ManagedDescriptor/comfygo-model.json"
+    run_gcd_cmd "GCD-003" "$WRAPPER" --models-dir "$MODELS_DIR" gc
+    if [ "$RUN_RC" -eq 0 ] && output_has "marker: descriptor" && trash_absent; then
+        write_gc_result "GCD-003" "PASS" "managed descriptor detected, no trash"
+    else
+        write_gc_result "GCD-003" "FAIL" "exit=$RUN_RC output=$(output_summary)"
+    fi
+
+    # GCD-004: Ambiguous folder
+    mkdir -p "$MODELS_DIR/AmbiguousOnly"
+    run_gcd_cmd "GCD-004" "$WRAPPER" --models-dir "$MODELS_DIR" gc
+    if [ "$RUN_RC" -eq 0 ] && output_has "Ambiguous" && [ -d "$MODELS_DIR/AmbiguousOnly" ]; then
+        write_gc_result "GCD-004" "PASS" "ambiguous folder listed, source unchanged"
+    else
+        write_gc_result "GCD-004" "FAIL" "exit=$RUN_RC output=$(output_summary)"
+    fi
+
+    # GCD-005: Reserved and hidden folders only
+    reset_models_dir
+    mkdir -p "$MODELS_DIR/diffusion_models" "$MODELS_DIR/.hidden_folder"
+    run_gcd_cmd "GCD-005" "$WRAPPER" --models-dir "$MODELS_DIR" gc
+    if [ "$RUN_RC" -eq 0 ] && output_exact "Nothing to report." && trash_absent; then
+        write_gc_result "GCD-005" "PASS" "reserved/hidden skipped, exact empty report, no trash"
+    else
+        write_gc_result "GCD-005" "FAIL" "exit=$RUN_RC output=$(output_summary)"
+    fi
+
+    # GCD-006: Source symlink dry-run
+    reset_models_dir
+    mkdir -p "$MODELS_DIR/real"
+    ln -s real "$MODELS_DIR/LinkedModel"
+    run_gcd_cmd "GCD-006" "$WRAPPER" --models-dir "$MODELS_DIR" gc
+    if [ "$RUN_RC" -eq 0 ] && output_has "symlink" && [ -L "$MODELS_DIR/LinkedModel" ] && trash_absent; then
+        write_gc_result "GCD-006" "PASS" "source symlink warning, symlink unchanged, no trash"
+    else
+        write_gc_result "GCD-006" "FAIL" "exit=$RUN_RC output=$(output_summary)"
+    fi
+
+    # GCD-007: Source symlink with -f
+    run_gcd_cmd "GCD-007" "$WRAPPER" --models-dir "$MODELS_DIR" gc -f LinkedModel
+    if [ "$RUN_RC" -eq 1 ] && output_has "symlink" && [ -L "$MODELS_DIR/LinkedModel" ] && trash_absent; then
+        write_gc_result "GCD-007" "PASS" "symlink -f filtered -> exit 1, no trash"
+    else
+        write_gc_result "GCD-007" "FAIL" "exit=$RUN_RC output=$(output_summary)"
+    fi
+
+    # GCD-008: Source symlink with -f --apply
+    run_gcd_cmd "GCD-008" "$WRAPPER" --models-dir "$MODELS_DIR" gc -f LinkedModel --apply
+    if [ "$RUN_RC" -eq 1 ] && output_has "symlink" && [ -L "$MODELS_DIR/LinkedModel" ] && trash_absent; then
+        write_gc_result "GCD-008" "PASS" "symlink --apply rejected, no trash"
+    else
+        write_gc_result "GCD-008" "FAIL" "exit=$RUN_RC output=$(output_summary)"
+    fi
+
+    # GCD-009: --apply without -f
+    reset_models_dir
+    mkdir -p "$MODELS_DIR/ManagedDownloader"
+    printf '{}' > "$MODELS_DIR/ManagedDownloader/.comfygo-download.json"
+    run_gcd_cmd "GCD-009" "$WRAPPER" --models-dir "$MODELS_DIR" gc --apply
+    if [ "$RUN_RC" -eq 1 ] && output_has "requires -f NAME" && [ -d "$MODELS_DIR/ManagedDownloader" ] && trash_absent; then
+        write_gc_result "GCD-009" "PASS" "--apply without -f rejected, no trash"
+    else
+        write_gc_result "GCD-009" "FAIL" "exit=$RUN_RC output=$(output_summary)"
+    fi
+
+    # GCD-010: Missing target
+    run_gcd_cmd "GCD-010" "$WRAPPER" --models-dir "$MODELS_DIR" gc -f Missing --apply
+    if [ "$RUN_RC" -eq 1 ] && output_has "No managed folder" && [ -d "$MODELS_DIR/ManagedDownloader" ] && trash_absent; then
+        write_gc_result "GCD-010" "PASS" "missing target rejected, no trash"
+    else
+        write_gc_result "GCD-010" "FAIL" "exit=$RUN_RC output=$(output_summary)"
+    fi
+
+    # GCD-011: Ambiguous-only --apply
+    mkdir -p "$MODELS_DIR/AmbiguousOnly"
+    run_gcd_cmd "GCD-011" "$WRAPPER" --models-dir "$MODELS_DIR" gc -f AmbiguousOnly --apply
+    if [ "$RUN_RC" -eq 1 ] && output_has "not managed" && [ -d "$MODELS_DIR/AmbiguousOnly" ] && trash_absent; then
+        write_gc_result "GCD-011" "PASS" "ambiguous --apply rejected, no trash"
+    else
+        write_gc_result "GCD-011" "FAIL" "exit=$RUN_RC output=$(output_summary)"
+    fi
+
+    # GCD-012: Multi-match --apply
+    reset_models_dir
+    mkdir -p "$MODELS_DIR/ModelOne" "$MODELS_DIR/ModelTwo"
+    printf '{}' > "$MODELS_DIR/ModelOne/.comfygo-download.json"
+    printf '{}' > "$MODELS_DIR/ModelTwo/.comfygo-download.json"
+    run_gcd_cmd "GCD-012" "$WRAPPER" --models-dir "$MODELS_DIR" gc -f Model --apply
+    if [ "$RUN_RC" -eq 1 ] && output_has "multiple" && [ -d "$MODELS_DIR/ModelOne" ] && [ -d "$MODELS_DIR/ModelTwo" ] && trash_absent; then
+        write_gc_result "GCD-012" "PASS" "multi-match rejected, both sources unchanged, no trash"
+    else
+        write_gc_result "GCD-012" "FAIL" "exit=$RUN_RC output=$(output_summary)"
+    fi
+
+    # GCD-013: Unsafe path segment
+    reset_models_dir
+    mkdir -p "$MODELS_DIR/~UnsafeModel"
+    printf '{}' > "$MODELS_DIR/~UnsafeModel/.comfygo-download.json"
+    run_gcd_cmd "GCD-013" "$WRAPPER" --models-dir "$MODELS_DIR" gc -f '~UnsafeModel' --apply
+    if [ "$RUN_RC" -eq 1 ] && output_has "Unsafe path segment" && output_lacks "Traceback" && [ -d "$MODELS_DIR/~UnsafeModel" ] && trash_absent; then
+        write_gc_result "GCD-013" "PASS" "unsafe path rejected without traceback or trash"
+    else
+        write_gc_result "GCD-013" "FAIL" "exit=$RUN_RC output=$(output_summary)"
+    fi
+
+    # GCD-014: Successful quarantine
+    reset_models_dir
+    mkdir -p "$MODELS_DIR/ManagedDownloader"
+    printf '{}' > "$MODELS_DIR/ManagedDownloader/.comfygo-download.json"
+    run_gcd_cmd "GCD-014" "$WRAPPER" --models-dir "$MODELS_DIR" gc -f ManagedDownloader --apply
+    trash_date_dir="$MODELS_DIR/.comfygo_trash/$gc_today"
+    trash_dest="$trash_date_dir/ManagedDownloader"
+    trash_count=0
+    if [ -d "$trash_date_dir" ]; then
+        trash_count=$(find "$trash_date_dir" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+    fi
+    if [ "$RUN_RC" -eq 0 ] && output_has "Quarantined" && [ ! -e "$MODELS_DIR/ManagedDownloader" ] && [ -d "$trash_dest" ] && [ "$trash_count" -eq 1 ]; then
+        write_gc_result "GCD-014" "PASS" "quarantine succeeded at .comfygo_trash/$gc_today/ManagedDownloader"
+    else
+        write_gc_result "GCD-014" "FAIL" "exit=$RUN_RC output=$(output_summary)"
+    fi
+    trash_snapshot_before="$run_dir/GCD-015-trash-before.txt"
+    if [ -d "$MODELS_DIR/.comfygo_trash" ]; then
+        find "$MODELS_DIR/.comfygo_trash" -mindepth 1 -maxdepth 4 -print | sort > "$trash_snapshot_before"
+    else
+        : > "$trash_snapshot_before"
+    fi
+
+    # GCD-015: Idempotency (re-apply on same name after GCD-014)
+    run_gcd_cmd "GCD-015" "$WRAPPER" --models-dir "$MODELS_DIR" gc -f ManagedDownloader --apply
+    trash_snapshot_after="$run_dir/GCD-015-trash-after.txt"
+    if [ -d "$MODELS_DIR/.comfygo_trash" ]; then
+        find "$MODELS_DIR/.comfygo_trash" -mindepth 1 -maxdepth 4 -print | sort > "$trash_snapshot_after"
+    else
+        : > "$trash_snapshot_after"
+    fi
+    if [ "$RUN_RC" -eq 1 ] && output_has "No managed folder" && cmp -s "$trash_snapshot_before" "$trash_snapshot_after"; then
+        write_gc_result "GCD-015" "PASS" "idempotent re-apply rejected, trash unchanged"
+    else
+        write_gc_result "GCD-015" "FAIL" "exit=$RUN_RC output=$(output_summary)"
+    fi
+
+    # GCD-016: Flag ordering (--models-dir after subcommand)
+    reset_models_dir
+    mkdir -p "$MODELS_DIR/ManagedDownloader"
+    printf '{}' > "$MODELS_DIR/ManagedDownloader/.comfygo-download.json"
+    run_gcd_cmd "GCD-016" "$WRAPPER" gc --models-dir "$MODELS_DIR"
+    if [ "$RUN_RC" -eq 0 ] && output_has "ManagedDownloader" && trash_absent; then
+        write_gc_result "GCD-016" "PASS" "flag ordering works, no trash"
+    else
+        write_gc_result "GCD-016" "FAIL" "exit=$RUN_RC output=$(output_summary)"
+    fi
+
+    if "$gc_ok"; then
+        echo "  PASS: all 16 GCD scenarios passed"
+    else
+        echo "--- GC doctor summary ---"
+        cat "$gc_log"
+    fi
+fi
+
+# ── Phase 4: Live validation (optional) ─────────────────────────────
+start_phase "phase4" "Phase 4: Live validation"
+
+if [ "$skip_live" = true ]; then
+    record_skip "--fast requested; live validation skipped"
+elif [ "$preflight_git_clean" != true ]; then
+    record_skip "repo is not clean; live validation requires clean git state"
+elif [ -n "${COMFYUI_DIR:-}" ] && [ -d "$COMFYUI_DIR" ]; then
+    if [ -x "$SCRIPT_DIR/comfygo-live-validate" ]; then
+        live_log="$run_dir/live-validate.log"
+        if "$SCRIPT_DIR/comfygo-live-validate" > "$live_log" 2>&1; then
+            record_pass "live validation succeeded"
+        else
+            record_fail "live validation failed"
+            echo "--- last 15 lines of live validation ---"
+            tail -15 "$live_log"
+        fi
+    else
+        record_fail "scripts/comfygo-live-validate not found"
+    fi
+else
+    record_skip "COMFYUI_DIR not set or missing"
+fi
+
+# ── Result ──────────────────────────────────────────────────────────
+print_phase_summary
+echo ""
+if [ "$failed" -eq 0 ]; then
+    echo "PASS: all verification passed"
+    echo "Evidence: $run_dir"
+    exit 0
+else
+    echo "FAIL: one or more checks failed"
+    echo "Evidence: $run_dir"
+    exit 1
+fi

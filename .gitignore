@@ -11,6 +11,8 @@
 *.pyc
 *.pyo
 __pycache__/
+.venv/
+venv/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
@@ -48,3 +50,6 @@ debug_*.json
 
 # Model registry generated compatibility views (runtime, disposable).
 .comfygo_views/
+
+# GC quarantine area (runtime only — never commit model data).
+.comfygo_trash/

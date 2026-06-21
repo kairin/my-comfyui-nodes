@@ -190,6 +190,53 @@ Apply reconcile — creates symlinks and prunes stale entries:
 Reconcile complete: 3 view(s) created; 0 stale view(s) pruned
 ```
 
+### `comfygo models gc [-f/--filter <name>] [--apply]`
+
+Inspect model folders known to comfygo and optionally quarantine one explicit
+managed folder. GC is dry-run by default and does not create, move, or delete
+anything unless both `-f NAME` and `--apply` are supplied.
+
+```bash
+scripts/comfygo-models.sh gc --models-dir "$COMFYUI_MODELS_DIR"
+```
+
+Example dry-run output:
+
+```text
+Managed folders:
+  $COMFYUI_MODELS_DIR/Old-Test-Model
+    marker: downloader
+
+Ambiguous:
+  $COMFYUI_MODELS_DIR/Untagged-Folder
+    no marker file found
+```
+
+To quarantine a specific managed folder:
+
+```bash
+scripts/comfygo-models.sh gc --models-dir "$COMFYUI_MODELS_DIR" \
+  -f Old-Test-Model --apply
+```
+
+The folder is moved with `os.rename()` into:
+
+```text
+$COMFYUI_MODELS_DIR/.comfygo_trash/<date>/Old-Test-Model/
+```
+
+There is no restore command in v1. To restore manually, move the quarantined
+folder back to its original top-level model-root path:
+
+```bash
+mv "$COMFYUI_MODELS_DIR/.comfygo_trash/<date>/Old-Test-Model" \
+  "$COMFYUI_MODELS_DIR/Old-Test-Model"
+```
+
+A `.comfygo-download.json` or `comfygo-model.json` marker means comfygo knows
+the folder. It does not mean the folder is disposable. Always inspect the
+dry-run report before applying GC.
+
 ## Automatic Reconcile
 
 `comfygo`, `comfygo start`, and `comfygo restart` automatically reconcile
@@ -217,6 +264,24 @@ to inspect the proposed changes, then apply them explicitly:
 scripts/comfygo-models.sh --models-dir "$TEST_DIR" reconcile
 scripts/comfygo-models.sh --models-dir "$TEST_DIR" reconcile --apply
 ```
+
+### GC Safety Doctor
+
+GC safety checks are documented separately from the default registry doctor.
+Use `specs/002-model-gc/doctor-matrix.md` when scripting a doctor-style GC
+validation pass.
+
+The safe boundary is:
+
+- run `gc --apply` only in temporary model roots created by the harness
+- use the live model root only for `gc` dry-run smoke checks
+- fail the check on any unexpected filesystem change
+- never run live `gc --apply` from doctor
+
+The temp-root matrix covers empty roots, downloader and descriptor markers,
+ambiguous folders, reserved and hidden folders, source symlinks, missing
+filters, ambiguous-only apply, multi-match apply, unsafe folder names,
+successful quarantine, repeated apply, and wrapper flag placement.
 
 ## Migration From Category Folders
 

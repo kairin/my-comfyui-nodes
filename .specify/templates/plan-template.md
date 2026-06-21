@@ -53,6 +53,10 @@
 - **Verifiable runtime behavior**: Plan includes `comfygo doctor`, dry-run, or
   equivalent verification for changes that affect launch, sync, patches, or
   runtime library paths.
+- **Changelog (VIII)**: User-facing or significant changes are documented in root
+  CHANGELOG.md.
+- **Branch protection & safety nets (IX)**: Repo/CI related plans respect or
+  improve main branch protection and Codacy quality/security gates.
 
 ## Project Structure
 

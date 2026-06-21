@@ -6,7 +6,6 @@ import json
 import pathlib
 import tempfile
 
-import pytest
 
 from custom_nodes.comfygo_model_registry import descriptor
 
@@ -117,9 +116,7 @@ class TestParseDescriptor:
         # The bad component should be skipped, resulting in no valid components.
         assert desc is None
 
-    def test_forward_compatible_unknown_fields(
-        self, tmp_path: pathlib.Path
-    ) -> None:
+    def test_forward_compatible_unknown_fields(self, tmp_path: pathlib.Path) -> None:
         """Unknown top-level fields must not cause rejection."""
         data = {
             "schema": "comfygo.model.v1",

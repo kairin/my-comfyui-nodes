@@ -9,14 +9,32 @@ personal prompts, local paths with secrets, or runtime histories here.
 
 This repo is configured with a Codacy CI analysis workflow at `.github/workflows/codacy-analysis.yml`.
 
-To complete setup:
+**Important**: Codacy is a *final gate*, not the place to discover problems. All code must pass local quality checks *before* you commit or push.
 
+### Local verification (required before commit/push)
+See the detailed process in:
+- `docs/workflow.md` → "Local Quality Gates (Mandatory Before Commit/Push)"
+- `AGENTS.md` → "Quality Gates (Before ANY Commit or Push)"
+- `.pre-commit-config.yaml`
+- `scripts/verify-quality.sh`
+
+Run these before every commit:
+```bash
+pre-commit run --all-files
+./scripts/verify-quality.sh
+```
+
+This replicates (as much as possible) the tools Codacy runs (Ruff, Bandit, ShellCheck, tests, etc.). When local verification passes, the CI check should pass.
+
+### CI setup
 1. In Codacy, add the GitHub repository `kairin/my-comfyui-nodes`.
 2. Generate a project token in Codacy.
 3. Add it to this repository as GitHub secret `CODACY_PROJECT_TOKEN`.
 4. Push a commit (or open a pull request) to trigger the analysis job.
 
 The workflow expects `.codacy.yml` and runs on `main` and pull requests to `main`.
+
+Branch protection requires the Codacy check to pass before merges.
 
 ## Layout
 

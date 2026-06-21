@@ -55,9 +55,7 @@ def create_view(
     model_dir = category_dir / view.model_name
 
     if vroot.is_symlink():
-        print(
-            f"Warning: skipping view operations because {vroot} is a symlink"
-        )
+        print(f"Warning: skipping view operations because {vroot} is a symlink")
         return None
     if category_dir.is_symlink():
         print(
@@ -84,9 +82,7 @@ def create_view(
     # Compute relative symlink from link → target using resolved paths
     # so that symlinked ancestors don't introduce .. escapes.
     rel_target = pathlib.Path(
-        os_pathlib_relpath(
-            str(target.resolve()), str(link.parent.resolve())
-        )
+        os_pathlib_relpath(str(target.resolve()), str(link.parent.resolve()))
     )
 
     if link.is_symlink() or link.exists():
@@ -119,9 +115,7 @@ def remove_stale_views(
     """
     vroot = views_root(models_dir)
     if vroot.is_symlink():
-        print(
-            f"Warning: skipping stale view pruning because {vroot} is a symlink"
-        )
+        print(f"Warning: skipping stale view pruning because {vroot} is a symlink")
         return 0
     if not vroot.is_dir():
         return 0
@@ -191,4 +185,5 @@ def os_pathlib_relpath(path: str, start: str) -> str:
     ``symlink_to``.
     """
     import os
+
     return os.path.relpath(path, start)

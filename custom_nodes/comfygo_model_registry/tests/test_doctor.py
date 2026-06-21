@@ -10,7 +10,9 @@ REPO_DIR = pathlib.Path(__file__).resolve().parents[3]
 COMFY_LOCAL_SCRIPT = REPO_DIR / "scripts" / "comfy-local"
 
 
-def _make_fake_comfyui_dir(repo_dir: pathlib.Path, tmp_root: pathlib.Path) -> pathlib.Path:
+def _make_fake_comfyui_dir(
+    repo_dir: pathlib.Path, tmp_root: pathlib.Path
+) -> pathlib.Path:
     """Create a fake ComfyUI checkout with vendored custom_nodes."""
     comfyui_dir = tmp_root / "comfyui"
     source_nodes = repo_dir / "custom_nodes"

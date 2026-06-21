@@ -14,3 +14,9 @@ cd "$comfy_cli_dir"
 uv run comfy --workspace "$comfyui_dir" update comfy "$@"
 
 COMFYUI_DIR="$comfyui_dir" "$repo_dir/scripts/install-to-comfyui.sh"
+
+# T012: re-patch after update step (part of sequential "get up to date")
+# Re-apply known patches using manifests (see T009/T010)
+COMFYUI_DIR="$comfyui_dir" "$repo_dir/scripts/apply-comfyui-patches.sh" || true
+COMFY_CLI_DIR="$comfy_cli_dir" "$repo_dir/scripts/apply-comfy-cli-patches.sh" || true
+echo "Re-patch after update attempted (use manifests for drift detection in future)."

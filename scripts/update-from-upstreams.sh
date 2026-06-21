@@ -47,6 +47,11 @@ while IFS=$'\t' read -r folder url source ref notes; do
     --exclude='*.bin' \
     --exclude='*.gguf' \
     --exclude='*.onnx' \
+    --exclude='tests/' \
+    --exclude='testframework/' \
+    --exclude='test*.py' \
+    --exclude='pytest.ini' \
+    --exclude='requirements-dev.txt' \
     "$clone_dir/" "$repo_dir/custom_nodes/$folder/"
 done < "$upstreams"
 
