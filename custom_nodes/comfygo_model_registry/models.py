@@ -11,15 +11,14 @@ from typing import Optional
 # Segment names that are unsafe for filesystem path construction.
 _SEGMENT_DENY_RE = re.compile(r"[/\\]|(?:^|/)\.\.(?:$|$|[/\\])|^~")
 
+
 def validate_path_segment(segment: str, *, context: str = "") -> None:
     """Raise ValueError if *segment* contains path separators or traversal.
 
     Callers should pass a short *context* label for error messages.
     """
     if not segment or _SEGMENT_DENY_RE.search(segment):
-        raise ValueError(
-            f"Unsafe path segment{context}: {segment!r}"
-        )
+        raise ValueError(f"Unsafe path segment{context}: {segment!r}")
 
 
 class ModelKind(enum.Enum):
@@ -69,9 +68,7 @@ class Descriptor:
     name: str
     kind: str
     source: Optional[ModelSource] = None
-    components: dict[str, ComponentDescriptor] = dataclasses.field(
-        default_factory=dict
-    )
+    components: dict[str, ComponentDescriptor] = dataclasses.field(default_factory=dict)
     notes: Optional[str] = None
     workflows: list[str] = dataclasses.field(default_factory=list)
     preview_images: list[str] = dataclasses.field(default_factory=list)

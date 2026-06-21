@@ -16,9 +16,7 @@ def test_create_view_rejects_symlinked_views_root(
     target.mkdir(parents=True)
     outside = tmp_path / "outside"
     outside.mkdir()
-    compat_views.views_root(tmp_path).symlink_to(
-        outside, target_is_directory=True
-    )
+    compat_views.views_root(tmp_path).symlink_to(outside, target_is_directory=True)
     view = models.CompatibilityView(
         category="diffusion_models",
         model_name="Model",
@@ -40,9 +38,7 @@ def test_remove_stale_views_skips_symlinked_category(
     vroot.mkdir()
     outside = tmp_path / "outside-category"
     outside.mkdir()
-    (vroot / "diffusion_models").symlink_to(
-        outside, target_is_directory=True
-    )
+    (vroot / "diffusion_models").symlink_to(outside, target_is_directory=True)
 
     removed = compat_views.remove_stale_views(tmp_path, set())
 

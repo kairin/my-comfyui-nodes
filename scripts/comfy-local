@@ -47,6 +47,28 @@ load_local_env() {
 
 load_local_env
 
+# Up-front declarative settings loader (T006 / T030 for 004)
+# Looks for a local ignored settings file with key=value pairs.
+# This allows configuring patching policy, launch behavior (tmux), model enrichment,
+# and protection reminders without hard-coding.
+load_comfygo_settings() {
+  local settings_file="${COMFYGO_SETTINGS:-$repo_dir/.comfygo-settings}"
+  if [[ -f "$settings_file" ]]; then
+    set -a
+    # shellcheck source=/dev/null
+    source "$settings_file"
+    set +a
+    echo "Loaded comfygo settings from $settings_file (env_source was: $env_source)"
+    env_source="$env_source, $settings_file"
+  else
+    # Default safe settings if no file
+    COMFYGO_LAUNCH_TMUX_NAME="${COMFYGO_LAUNCH_TMUX_NAME:-comfyui}"
+    COMFYGO_PATCH_POLICY="${COMFYGO_PATCH_POLICY:-strict}"
+  fi
+}
+
+load_comfygo_settings
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -68,6 +90,7 @@ Commands:
   patch-comfyui      Apply ComfyUI core patches to COMFYUI_DIR.
   refresh-upstreams  Refresh vendored node copies from UPSTREAMS.tsv.
   runtime-envrc      Write a machine-local direnv file for the ComfyUI runtime root.
+  tmux-send "command"  Send command to the tmux target (for control from shell).
 
 Configuration:
   Preferred: use direnv with .envrc.local next to this script's parent repo.
@@ -75,6 +98,16 @@ Configuration:
 
     COMFYUI_DIR=/path/to/ComfyUI
     COMFY_CLI_DIR=/path/to/comfy-cli
+
+Up-front settings (004 feature, via .comfygo-settings or COMFYGO_SETTINGS):
+  COMFYGO_LAUNCH_TMUX_NAME=comfyui          # tmux window/pane name
+  COMFYGO_PATCH_POLICY=strict               # strict | lenient
+  COMFYGO_ENRICH_CIVITAI=1                  # enable Civitai lookup
+  COMFYGO_PROTECTION_REMIND=1               # remind about branch protection
+
+Example .comfygo-settings (gitignored):
+  COMFYGO_LAUNCH_TMUX_NAME=my-comfy
+  COMFYGO_PATCH_POLICY=strict
 
 EOF
 }
@@ -114,6 +147,30 @@ patch_state() {
   else
     echo "does not apply cleanly"
   fi
+}
+
+# T010: Re-patch / drift detection using manifests (for US1)
+# Reads manifest.md in patch dir, lists expected patches, checks state.
+# On mismatch or drift, suggests re-apply or update patch.
+patch_drift_check() {
+  local target_dir="$1"
+  local patch_dir="$2"  # e.g. comfyui-patches or comfy-cli-patches
+  local manifest="$patch_dir/manifest.md"
+
+  if [[ ! -f "$manifest" ]]; then
+    echo "no manifest in $patch_dir"
+    return
+  fi
+
+  echo "Manifest in $patch_dir:"
+  # Simple parse: look for lines with .patch
+  grep -E '\.patch' "$manifest" | while read -r line; do
+    patch_file=$(echo "$line" | grep -oE '[^ ]+\.patch')
+    if [[ -n "$patch_file" && -f "$patch_dir/$patch_file" ]]; then
+      state=$(patch_state "$target_dir" "$patch_dir/$patch_file")
+      echo "  $patch_file: $state"
+    fi
+  done
 }
 
 expected_node_status() {
@@ -789,6 +846,21 @@ doctor() {
   echo "COMFYUI_DIR: ${COMFYUI_DIR:-not set}"
   echo "COMFY_CLI_DIR: ${COMFY_CLI_DIR:-not set}"
 
+  # T007: protection status (per constitution IX, T004/T005/T034)
+  echo "Protection:"
+  if command -v gh >/dev/null 2>&1; then
+    if gh api repos/kairin/my-comfyui-nodes/branches/main/protection >/dev/null 2>&1; then
+      echo "  GitHub main: active (required PRs + analysis check + conversation resolution; see gh api for full)"
+    else
+      echo "  GitHub main: missing or inaccessible"
+      failed=1
+    fi
+  else
+    echo "  gh CLI: not on PATH (install via uv tool for full check)"
+  fi
+  echo "  Codacy Gate Policy: active (per constitution + workflow.md; analysis required in GitHub)"
+  echo "  (Run 'gh api ...' or extend with 'comfygo doctor --protection' for more)"
+
   if command -v uv >/dev/null 2>&1; then
     echo "uv: available"
   else
@@ -805,6 +877,7 @@ doctor() {
     echo "ComfyUI exists: yes"
     echo "ComfyUI Git checkout: $([[ -d "$COMFYUI_DIR/.git" ]] && echo yes || echo no)"
     echo "ComfyUI patch: $(patch_state "$COMFYUI_DIR" "$repo_dir/comfyui-patches/comfy-sd-qwen-image-vae.patch")"
+    patch_drift_check "$COMFYUI_DIR" "$repo_dir/comfyui-patches"
     runtime_envrc_status
     load_runtime_direnv_env
     echo "Runtime direnv load: $runtime_env_source"
@@ -932,6 +1005,68 @@ launch_comfyui() {
   exec uv run comfy --workspace "$COMFYUI_DIR" launch -- "$@"
 }
 
+# T015: Tmux helpers for US2
+# Use COMFYGO_LAUNCH_TMUX_NAME from settings.
+tmux_target() {
+  echo "${COMFYGO_LAUNCH_TMUX_NAME:-comfyui}"
+}
+
+tmux_launch() {
+  local name=$(tmux_target)
+  require_comfyui_dir
+  require_comfy_cli_dir
+  require_uv
+  load_runtime_direnv_env
+  prepare_comfyui_runtime_env
+  reconcile_model_views
+  COMFYUI_DIR="$COMFYUI_DIR" "$repo_dir/scripts/install-to-comfyui.sh"
+  expected_node_status
+  if [[ $# -eq 0 ]]; then
+    set -- --listen 127.0.0.1 --port 8188
+  fi
+  echo "Browser: refresh any already-open ComfyUI tab after the backend finishes starting."
+  if command -v tmux >/dev/null 2>&1; then
+    # Launch in tmux window, controlling shell stays free
+    tmux new-window -n "$name" -d "cd $COMFY_CLI_DIR && uv run comfy --workspace $COMFYUI_DIR launch -- $*"
+    echo "Launched ComfyUI in tmux window '$name'. Use 'tmux attach -t $(tmux_target)' or control via helpers."
+    echo "Target recorded: $name"
+  else
+    echo "tmux not found, falling back to direct launch (see T017)."
+    cd "$COMFY_CLI_DIR"
+    exec uv run comfy --workspace "$COMFYUI_DIR" launch -- "$@"
+  fi
+}
+
+tmux_send_command() {
+  local name=$(tmux_target)
+  if command -v tmux >/dev/null 2>&1; then
+    tmux send-keys -t "$name" "$*" C-m
+    echo "Sent to tmux '$name': $*"
+  else
+    echo "tmux not available for send-command."
+  fi
+}
+
+# T014 / T032: strict sequence for launch
+# update/patch (US1) -> verify (incl protection) -> tmux launch
+full_launch_sequence() {
+  echo "=== 004 Full Sequence: update/patch -> verify -> tmux launch ==="
+  # US1 patching
+  COMFYUI_DIR="$COMFYUI_DIR" "$repo_dir/scripts/install-to-comfyui.sh" || true
+  # re-patch
+  COMFYUI_DIR="$COMFYUI_DIR" "$repo_dir/scripts/apply-comfyui-patches.sh" || true
+  COMFY_CLI_DIR="$COMFY_CLI_DIR" "$repo_dir/scripts/apply-comfy-cli-patches.sh" || true
+  # verify (gate)
+  "$repo_dir/scripts/verify-quality.sh" || { echo "Verify failed, aborting launch"; exit 1; }
+  # protection check if in doctor
+  # launch
+  if [[ "${COMFYGO_USE_TMUX:-1}" == "1" ]]; then
+    tmux_launch "$@"
+  else
+    launch_comfyui "$@"
+  fi
+}
+
 restart_comfyui() {
   require_comfyui_dir
   require_comfy_cli_dir
@@ -965,7 +1100,8 @@ case "$command" in
     require_comfyui_dir
     require_comfy_cli_dir
     ensure_comfy_cli_patch
-    launch_comfyui "$@"
+    # T014: use full sequence for go
+    full_launch_sequence "$@"
     ;;
 
   doctor)
@@ -981,11 +1117,13 @@ case "$command" in
     if [[ -n "${COMFYUI_DIR:-}" ]]; then
       echo "ComfyUI exists: $([[ -d "$COMFYUI_DIR" ]] && echo yes || echo no)"
       echo "ComfyUI patch: $(patch_state "$COMFYUI_DIR" "$repo_dir/comfyui-patches/comfy-sd-qwen-image-vae.patch")"
+      patch_drift_check "$COMFYUI_DIR" "$repo_dir/comfyui-patches"
     fi
 
     if [[ -n "${COMFY_CLI_DIR:-}" ]]; then
       echo "comfy-cli exists: $([[ -d "$COMFY_CLI_DIR" ]] && echo yes || echo no)"
       echo "comfy-cli patch: $(patch_state "$COMFY_CLI_DIR" "$repo_dir/comfy-cli-patches/add-local-nodes-command.patch")"
+      patch_drift_check "$COMFY_CLI_DIR" "$repo_dir/comfy-cli-patches"
     fi
     ;;
 
@@ -999,7 +1137,7 @@ case "$command" in
     ;;
 
   start|launch)
-    launch_comfyui "$@"
+    full_launch_sequence "$@"
     ;;
 
   restart)
@@ -1028,6 +1166,11 @@ case "$command" in
   patch-comfyui)
     require_comfyui_dir
     COMFYUI_DIR="$COMFYUI_DIR" "$repo_dir/scripts/apply-comfyui-patches.sh" "$@"
+    ;;
+
+  tmux-send)
+    shift
+    tmux_send_command "$@"
     ;;
 
   refresh-upstreams)

@@ -20,7 +20,8 @@ def build_parser() -> argparse.ArgumentParser:
         description="Inspect and reconcile the ComfyUI model library.",
     )
     parser.add_argument(
-        "-f", "--filter",
+        "-f",
+        "--filter",
         dest="filter",
         type=str,
         default=None,
@@ -30,16 +31,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--models-dir",
         type=str,
         default=None,
-        help="Override the model root directory "
-        "(default: folder_paths.models_dir)",
+        help="Override the model root directory (default: folder_paths.models_dir)",
     )
     sub = parser.add_subparsers(dest="command")
 
-    reconcile_parser = sub.add_parser(
-        "reconcile", help="Reconcile compatibility views"
-    )
+    reconcile_parser = sub.add_parser("reconcile", help="Reconcile compatibility views")
     reconcile_parser.add_argument(
-        "-f", "--filter",
+        "-f",
+        "--filter",
         dest="reconcile_filter",
         type=str,
         default=None,
@@ -52,6 +51,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Apply changes (default is dry-run)",
     )
 
+    gc_parser = sub.add_parser("gc", help="Report or quarantine managed model folders")
+    gc_parser.add_argument(
+        "-f",
+        "--filter",
+        dest="gc_filter",
+        type=str,
+        default=None,
+        help="Case-insensitive substring filter for folder names",
+    )
+    gc_parser.add_argument(
+        "--apply",
+        action="store_true",
+        default=False,
+        help="Quarantine the matching managed folder (requires -f NAME)",
+    )
+
     return parser
 
 
@@ -61,6 +76,7 @@ def get_models_dir(override: str | None = None) -> pathlib.Path:
         return pathlib.Path(override).resolve()
     try:
         import folder_paths  # type: ignore[import-untyped]
+
         raw = getattr(folder_paths, "models_dir", None)
         if not raw:
             print(
@@ -89,11 +105,7 @@ def cmd_list(
     ambiguous = [p for p in packages if p.ambiguous]
 
     if filter_str:
-        filtered = [
-            p
-            for p in identified
-            if filter_str.lower() in p.name.lower()
-        ]
+        filtered = [p for p in identified if filter_str.lower() in p.name.lower()]
         if not filtered:
             print(f"No models matching '{filter_str}'")
             return
@@ -138,8 +150,7 @@ def cmd_reconcile(
         target = [
             p
             for p in packages
-            if not p.ambiguous
-            and filter_str.lower() in p.name.lower()
+            if not p.ambiguous and filter_str.lower() in p.name.lower()
         ]
         if not target:
             print(f"No identifiable packages matching '{filter_str}'")
@@ -165,6 +176,21 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     models_dir = get_models_dir(args.models_dir)
+
+    if args.command == "gc":
+        from . import gc
+
+        # Gate: --apply requires -f NAME (no bulk quarantine).
+        gc_filter: str | None = getattr(args, "gc_filter", None) or args.filter
+        if args.apply and not gc_filter:
+            print("error: --apply requires -f NAME", file=sys.stderr)
+            sys.exit(1)
+
+        report = gc.run_gc(models_dir, filter_str=gc_filter, apply=args.apply)
+        if report.errors:
+            sys.exit(1)
+        return
+
     legacy_roots: list[pathlib.Path] = []
     for legacy_sub in ("diffusers", "library"):
         legacy_path = models_dir / legacy_sub
@@ -177,11 +203,8 @@ def main(argv: list[str] | None = None) -> None:
         # The reconcile subparser stores its --filter on a separate dest
         # so either global or subcommand filter placement works.
         filter_val = getattr(args, "reconcile_filter", None) or args.filter
-        cmd_reconcile(
-            packages, models_dir, filter_str=filter_val, apply=args.apply
-        )
+        cmd_reconcile(packages, models_dir, filter_str=filter_val, apply=args.apply)
     else:
-        models_dir_str = str(models_dir)
         cmd_list(packages, models_dir=models_dir, filter_str=args.filter)
 
 

@@ -1,0 +1,88 @@
+# Pre-commit hooks for local quality gates
+# This ensures code is clean BEFORE commit/push, so Codacy (and other CI) always passes.
+# Install once: uv tool install pre-commit && pre-commit install
+# Then: pre-commit run --all-files  (to run manually)
+#
+# Goal: Catch issues that would fail Codacy analysis locally.
+# Run this before every commit. Do not bypass with --no-verify.
+
+repos:
+  # Built-in useful checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        exclude: ^(custom_nodes/.*\.yml|custom_nodes/.*\.yaml)$
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-json
+        exclude: ^(custom_nodes/.*\.json|custom_nodes/.*\.json)$
+
+  # Python: Ruff (format + lint) - matches what we enabled in Codacy
+  # Scope to owned code only (exclude all vendored third-party custom nodes)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.4
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        files: ^(custom_nodes/comfygo_model_registry|scripts)/
+      - id: ruff-format
+        files: ^(custom_nodes/comfygo_model_registry|scripts)/
+
+  # Shell scripts: ShellCheck (matches Codacy ShellCheck)
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+        args: [--severity=warning]
+        files: ^scripts/.*\.(sh|bash)$
+
+  # Python security: Bandit (matches Codacy Bandit)
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.9
+    hooks:
+      - id: bandit
+        args: ["-c", "pyproject.toml", "-r"]
+        files: ^custom_nodes/comfygo_model_registry/.*\.py$
+        additional_dependencies: ["bandit[toml]"]
+
+  # General Python tests (fast subset for the main registry)
+  # Full tests can be run manually with uv run pytest
+  - repo: https://github.com/pre-commit/mirrors-pytest
+    rev: v8.2.1
+    hooks:
+      - id: pytest
+        name: pytest (registry tests)
+        args:
+          - "--tb=no"
+          - "-q"
+          - "custom_nodes/comfygo_model_registry/tests"
+        additional_dependencies: [pytest]
+        files: ^custom_nodes/comfygo_model_registry/.*\.py$
+        pass_filenames: false
+
+  # Local script to run full local verification mimicking Codacy + more
+  - repo: local
+    hooks:
+      - id: verify-quality
+        name: Full local quality verification (Codacy-equivalent)
+        entry: scripts/verify-quality.sh
+        language: script
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit, pre-push]
+
+ci:
+  autofix_commit_msg: |
+    [pre-commit.ci] auto fixes from pre-commit.com hooks
+    for more information, see https://pre-commit.ci
+  autofix_prs: true
+  autoupdate_branch: ""
+  autoupdate_commit_msg: "[pre-commit.ci] pre-commit autoupdate"
+  autoupdate_schedule: weekly
+  skip: [verify-quality]  # run verify in CI separately if needed
+  submodules: false

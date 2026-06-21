@@ -76,8 +76,7 @@ def parse_descriptor(path: pathlib.Path) -> Optional[models.Descriptor]:
     for comp_name, comp_raw in raw_components.items():
         if not isinstance(comp_raw, dict):
             print(
-                f"Warning: {path}: component '{comp_name}' is not an object — "
-                f"skipping"
+                f"Warning: {path}: component '{comp_name}' is not an object — skipping"
             )
             continue
         comp_path = comp_raw.get("path")
@@ -104,10 +103,7 @@ def parse_descriptor(path: pathlib.Path) -> Optional[models.Descriptor]:
         try:
             models.validate_path_segment(comp_name, context=" (component name)")
         except ValueError:
-            print(
-                f"Warning: {path}: component name '{comp_name}' is unsafe "
-                f"— skipping"
-            )
+            print(f"Warning: {path}: component name '{comp_name}' is unsafe — skipping")
             continue
         categories: list[str] = []
         for cat in comp_cats:
@@ -115,10 +111,7 @@ def parse_descriptor(path: pathlib.Path) -> Optional[models.Descriptor]:
             try:
                 models.validate_path_segment(cat_str, context=" (category)")
             except ValueError:
-                print(
-                    f"Warning: {path}: category '{cat_str}' is unsafe "
-                    f"— skipping"
-                )
+                print(f"Warning: {path}: category '{cat_str}' is unsafe — skipping")
                 continue
             categories.append(cat_str)
         if not categories:

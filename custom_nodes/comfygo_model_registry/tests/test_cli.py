@@ -8,6 +8,8 @@ import pathlib
 import subprocess
 import sys
 
+import pytest
+
 
 def _run_registry_subprocess(
     *,
@@ -16,7 +18,7 @@ def _run_registry_subprocess(
     extra_env: dict[str, str] | None = None,
 ) -> dict[str, object]:
     repo_dir = pathlib.Path(__file__).resolve().parents[3]
-    code = r'''
+    code = r"""
 import json
 import pathlib
 import sys
@@ -51,7 +53,7 @@ print(
         }
     )
 )
-'''
+"""
 
     env = os.environ.copy()
     env["PYTHONPATH"] = (
@@ -76,9 +78,10 @@ print(
     last_line = proc.stdout.strip().splitlines()[-1]
     return json.loads(last_line)
 
-from custom_nodes.comfygo_model_registry import cli
-from custom_nodes.comfygo_model_registry import compat_views
-from custom_nodes.comfygo_model_registry import scanner
+
+from custom_nodes.comfygo_model_registry import cli  # noqa: E402
+from custom_nodes.comfygo_model_registry import compat_views  # noqa: E402
+from custom_nodes.comfygo_model_registry import scanner  # noqa: E402
 
 
 def test_cli_filter_list(tmp_path: pathlib.Path) -> None:
@@ -201,6 +204,42 @@ def test_cli_list_has_no_view_side_effects(
     assert not (tmp_path / ".comfygo_views").exists()
 
 
+def test_cli_gc_does_not_call_package_scanner(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """GC dispatch must use raw top-level scan, not scanner packages."""
+    model = tmp_path / "ManagedModel"
+    model.mkdir()
+    (model / ".comfygo-download.json").write_text("{}")
+
+    def _raise_scan(*args, **kwargs):
+        raise AssertionError("scanner.scan_models must not run for gc")
+
+    monkeypatch.setattr(scanner, "scan_models", _raise_scan)
+
+    cli.main(["--models-dir", str(tmp_path), "gc"])
+
+    assert "Managed folders:" in capsys.readouterr().out
+
+
+def test_cli_gc_filtered_no_match_exits_one(
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """CLI exits 1 when filtered dry-run has no visible match."""
+    model = tmp_path / "ManagedModel"
+    model.mkdir()
+    (model / ".comfygo-download.json").write_text("{}")
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--models-dir", str(tmp_path), "gc", "-f", "Missing"])
+
+    assert exc_info.value.code == 1
+    assert "error: No folders matching 'Missing'" in capsys.readouterr().out
+
+
 def test_autorun_guard_skips_registry_when_disabled(
     tmp_path: pathlib.Path,
 ) -> None:
@@ -268,9 +307,7 @@ def test_startup_registry_reconcile_preserves_legacy_category_payloads(
     (package / "model_index.json").write_text("{}", encoding="utf-8")
     (package / "transformer").mkdir()
 
-    legacy_file = (
-        models_dir / "diffusion_models" / "LegacyModel" / "legacy.safetensors"
-    )
+    legacy_file = models_dir / "diffusion_models" / "LegacyModel" / "legacy.safetensors"
     legacy_file.parent.mkdir(parents=True)
     legacy_file.write_text("legacy payload", encoding="utf-8")
 

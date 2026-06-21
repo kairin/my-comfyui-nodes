@@ -177,7 +177,9 @@ def _default_package_name(repo: str, revision: str) -> str:
     return base
 
 
-def _split_args_file_patterns(raw_patterns: Optional[List[str]]) -> Dict[str, List[str]]:
+def _split_args_file_patterns(
+    raw_patterns: Optional[List[str]],
+) -> Dict[str, List[str]]:
     patterns: Dict[str, List[str]] = {}
     if not raw_patterns:
         return patterns
@@ -198,7 +200,12 @@ def _split_args_file_patterns(raw_patterns: Optional[List[str]]) -> Dict[str, Li
 
         normalized: List[str] = []
         for cat in category_values:
-            if "/" in cat or "\\" in cat or cat.startswith(".") or ".." in cat.split("."):
+            if (
+                "/" in cat
+                or "\\" in cat
+                or cat.startswith(".")
+                or ".." in cat.split(".")
+            ):
                 raise CliError(f"Unsafe category name '{cat}'")
             normalized.append(cat)
         patterns[pattern] = normalized
@@ -251,7 +258,10 @@ def _infer_kind(files: List[str], kind_override: Optional[str]) -> str:
         return "other"
     if any(n.endswith(".gguf") for n in names):
         return "gguf"
-    if any(n.endswith((".safetensors", ".ckpt", ".bin", ".pt", ".pth", ".sft")) for n in names):
+    if any(
+        n.endswith((".safetensors", ".ckpt", ".bin", ".pt", ".pth", ".sft"))
+        for n in names
+    ):
         return "checkpoint"
     return "other"
 
@@ -266,7 +276,9 @@ def _safe_component_name(file_path: str) -> str:
     return name or "component"
 
 
-def _local_file_status(output_dir: Path, file_path: str, remote_size: int) -> Tuple[str, int]:
+def _local_file_status(
+    output_dir: Path, file_path: str, remote_size: int
+) -> Tuple[str, int]:
     local_path = output_dir / file_path
     if not local_path.exists():
         return "missing", 0
@@ -353,7 +365,9 @@ def _read_json_file(path: Path, *, description: str) -> Dict[str, Any]:
     return data
 
 
-def _read_package_state(package_dir: Path) -> tuple[Optional[str], Optional[str], Optional[str]]:
+def _read_package_state(
+    package_dir: Path,
+) -> tuple[Optional[str], Optional[str], Optional[str]]:
     """Return inferred (repo, revision, package_name) from local package metadata."""
     package_dir = package_dir.resolve()
 
@@ -370,7 +384,9 @@ def _read_package_state(package_dir: Path) -> tuple[Optional[str], Optional[str]
                 package_name = package_name.strip() or None
         return (
             repo.strip() if isinstance(repo, str) and repo.strip() else None,
-            revision.strip() if isinstance(revision, str) and revision.strip() else None,
+            revision.strip()
+            if isinstance(revision, str) and revision.strip()
+            else None,
             package_name,
         )
 
@@ -383,14 +399,20 @@ def _read_package_state(package_dir: Path) -> tuple[Optional[str], Optional[str]
         package_name = data.get("name")
         return (
             repo.strip() if isinstance(repo, str) and repo.strip() else None,
-            revision.strip() if isinstance(revision, str) and revision.strip() else None,
-            package_name.strip() if isinstance(package_name, str) and package_name.strip() else None,
+            revision.strip()
+            if isinstance(revision, str) and revision.strip()
+            else None,
+            package_name.strip()
+            if isinstance(package_name, str) and package_name.strip()
+            else None,
         )
 
     return None, None, None
 
 
-def _fetch_hf_tree(repo: str, revision: str, token: str, recursive: bool) -> List[Dict[str, Any]]:
+def _fetch_hf_tree(
+    repo: str, revision: str, token: str, recursive: bool
+) -> List[Dict[str, Any]]:
     endpoint = (
         f"https://huggingface.co/api/models/{urllib.parse.quote(repo, safe='/')}/tree/"
         f"{urllib.parse.quote(revision, safe='')}"
@@ -402,19 +424,29 @@ def _fetch_hf_tree(repo: str, revision: str, token: str, recursive: bool) -> Lis
             payload = response.read().decode("utf-8")
             data = json.loads(payload)
     except urllib.error.HTTPError as exc:
-        raise CliError(_redact_token(
-            f"HF API request failed: HTTP {exc.code} {exc.reason}",
-            token,
-        )) from exc
+        raise CliError(
+            _redact_token(
+                f"HF API request failed: HTTP {exc.code} {exc.reason}",
+                token,
+            )
+        ) from exc
     except urllib.error.URLError as exc:
-        raise CliError(_redact_token(f"HF API request failed: {exc.reason}", token)) from exc
+        raise CliError(
+            _redact_token(f"HF API request failed: {exc.reason}", token)
+        ) from exc
     except json.JSONDecodeError as exc:
-        raise CliError(_redact_token(f"HF API returned invalid JSON: {exc}", token)) from exc
+        raise CliError(
+            _redact_token(f"HF API returned invalid JSON: {exc}", token)
+        ) from exc
 
     if not isinstance(data, list):
         raise CliError("HF API returned an unexpected response for repository tree")
 
-    return [entry for entry in data if isinstance(entry, dict) and entry.get("type") == "file"]
+    return [
+        entry
+        for entry in data
+        if isinstance(entry, dict) and entry.get("type") == "file"
+    ]
 
 
 def _extract_file_size(file_entry: Dict[str, Any]) -> int:
@@ -488,7 +520,9 @@ def _resolve_selection(text: str, max_index: int) -> List[int]:
     return sorted(indices)
 
 
-def _run_hf_dry_run(repo: str, file_path: str, revision: str, output_dir: Path, token: str) -> None:
+def _run_hf_dry_run(
+    repo: str, file_path: str, revision: str, output_dir: Path, token: str
+) -> None:
     command = [
         "hf",
         "download",
@@ -574,13 +608,20 @@ def _download_with_urllib(
             if attempt < 3:
                 time.sleep(min(attempt, 3))
                 continue
-            raise CliError(_redact_token(f"hf download failed for {file_path}: {exc.reason}", token)) from exc
+            raise CliError(
+                _redact_token(
+                    f"hf download failed for {file_path}: {exc.reason}", token
+                )
+            ) from exc
         break
 
     actual = dest.stat().st_size
     if remote_size > 0 and actual != remote_size:
         raise CliError(
-            _redact_token(f"size mismatch for {file_path}: remote={remote_size} local={actual}", token)
+            _redact_token(
+                f"size mismatch for {file_path}: remote={remote_size} local={actual}",
+                token,
+            )
         )
 
     return actual
@@ -649,11 +690,20 @@ def _build_descriptor_payload(
 
 def _write_json(path: Path, data: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(data, indent=2, sort_keys=False) + "\n", encoding="utf-8"
+    )
 
 
-def _write_metadata(path: Path, repo: str, revision: str, package_name: str, package_dir: Path,
-                 selected: List[Dict[str, Any]], downloaded_paths: Dict[str, int]) -> None:
+def _write_metadata(
+    path: Path,
+    repo: str,
+    revision: str,
+    package_name: str,
+    package_dir: Path,
+    selected: List[Dict[str, Any]],
+    downloaded_paths: Dict[str, int],
+) -> None:
     payload = {
         "schema": "comfygo.download.v1",
         "source": {
@@ -678,7 +728,9 @@ def _write_metadata(path: Path, repo: str, revision: str, package_name: str, pac
     _write_json(path, payload)
 
 
-def _build_file_rows(raw_files: List[Dict[str, Any]], skip_dotfiles: bool) -> List[Dict[str, Any]]:
+def _build_file_rows(
+    raw_files: List[Dict[str, Any]], skip_dotfiles: bool
+) -> List[Dict[str, Any]]:
     rows = []
     for entry in raw_files:
         path = entry.get("path", "")
@@ -686,18 +738,20 @@ def _build_file_rows(raw_files: List[Dict[str, Any]], skip_dotfiles: bool) -> Li
             continue
         if skip_dotfiles and path.startswith("."):
             continue
-        rows.append({
-            "name": path,
-            "size": _extract_file_size(entry),
-        })
+        rows.append(
+            {
+                "name": path,
+                "size": _extract_file_size(entry),
+            }
+        )
     return rows
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Download selected files from a Hugging Face repository using hf dry-run "+
-            "verification + streaming download, with optional package-mode output for model folders."
+            "Download selected files from a Hugging Face repository using hf dry-run "
+            + "verification + streaming download, with optional package-mode output for model folders."
         )
     )
     parser.add_argument(
@@ -708,12 +762,14 @@ def parse_args() -> argparse.Namespace:
             "Examples: user/repo, https://huggingface.co/user/repo, ."
         ),
     )
-    parser.add_argument("--revision", default="main", help="Repository revision (default: main)")
+    parser.add_argument(
+        "--revision", default="main", help="Repository revision (default: main)"
+    )
     parser.add_argument(
         "--output-dir",
         default=None,
         help="Legacy mode: download files directly here (no package descriptor). "
-             "When omitted, files are downloaded into package folder under --models-root.",
+        "When omitted, files are downloaded into package folder under --models-root.",
     )
     parser.add_argument(
         "--resume-from",
@@ -839,7 +895,9 @@ def main() -> int:
     source = (args.repo or "").strip()
     source_dir = _resolve_directory_arg(source)
     if source_dir is not None:
-        args.resume_from = str(source_dir) if args.resume_from is None else args.resume_from
+        args.resume_from = (
+            str(source_dir) if args.resume_from is None else args.resume_from
+        )
         repo = ""
     else:
         repo = _normalize_hf_repo(source)
@@ -863,7 +921,9 @@ def main() -> int:
             print(f"--resume-from path is not a directory: {package_dir}")
             return 1
         try:
-            inferred_repo, inferred_revision, inferred_package_name = _read_package_state(package_dir)
+            inferred_repo, inferred_revision, inferred_package_name = (
+                _read_package_state(package_dir)
+            )
         except CliError as err:
             print(str(err))
             inferred_repo = inferred_revision = inferred_package_name = None
@@ -898,7 +958,9 @@ def main() -> int:
             inferred_repo = inferred_revision = inferred_package_name = None
             if current_dir.is_dir():
                 try:
-                    inferred_repo, inferred_revision, inferred_package_name = _read_package_state(current_dir)
+                    inferred_repo, inferred_revision, inferred_package_name = (
+                        _read_package_state(current_dir)
+                    )
                 except CliError:
                     pass
 
@@ -955,7 +1017,9 @@ def main() -> int:
     if package_mode:
         rows = _enrich_with_local_state(rows, output_dir)
         if args.only_missing:
-            rows = [row for row in rows if row.get("local_status") in {"missing", "partial"}]
+            rows = [
+                row for row in rows if row.get("local_status") in {"missing", "partial"}
+            ]
             if not rows:
                 print("No missing files found in this package folder.")
                 return 0
@@ -989,7 +1053,9 @@ def main() -> int:
         selected = rows
     else:
         try:
-            choice = input("Select file numbers (comma/range, e.g. 1,3-5 or all): ").strip()
+            choice = input(
+                "Select file numbers (comma/range, e.g. 1,3-5 or all): "
+            ).strip()
         except EOFError:
             print("No selection input; aborting.")
             return 1
@@ -1056,7 +1122,9 @@ def main() -> int:
             if descriptor_payload:
                 descriptor_path = output_dir / "comfygo-model.json"
                 if descriptor_path.exists() and not args.overwrite_descriptor:
-                    print("Descriptor exists; skipping overwrite. Use --overwrite-descriptor to replace.")
+                    print(
+                        "Descriptor exists; skipping overwrite. Use --overwrite-descriptor to replace."
+                    )
                 else:
                     _write_json(descriptor_path, descriptor_payload)
                     print(f"wrote descriptor: {descriptor_path}")

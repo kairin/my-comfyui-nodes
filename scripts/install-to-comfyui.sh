@@ -70,6 +70,12 @@ rsync_flags=(
   --exclude='*.bin'
   --exclude='*.gguf'
   --exclude='*.onnx'
+  --exclude='tests/'
+  --exclude='testframework/'
+  --exclude='test*.py'
+  --exclude='pytest.ini'
+  --exclude='requirements-dev.txt'
+  --exclude='conftest.py'
 )
 
 if (( dry_run )); then

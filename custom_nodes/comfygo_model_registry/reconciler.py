@@ -105,9 +105,7 @@ def reconcile(
                 )
 
                 # Check for conflicts with already-registered views.
-                conflict_key = (
-                    f"{category}/{pkg.name}/{comp.logical_name}"
-                )
+                conflict_key = f"{category}/{pkg.name}/{comp.logical_name}"
                 existing = _find_matching_view(
                     desired_views, category, pkg.name, comp.logical_name
                 )

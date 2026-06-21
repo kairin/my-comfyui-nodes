@@ -20,7 +20,7 @@ def _make_diffusers_folder(
     (folder / "model_index.json").write_text(
         json.dumps({"model_index": True}), encoding="utf-8"
     )
-    for sub in (subdirs or []):
+    for sub in subdirs or []:
         (folder / sub).mkdir(parents=True, exist_ok=True)
     return folder
 
@@ -43,9 +43,7 @@ class TestDiffusersInference:
 
     def test_partial_diffusers_package(self, tmp_path: pathlib.Path) -> None:
         """Only existing subdirectories should be inferred."""
-        _make_diffusers_folder(
-            tmp_path, "PartialModel", subdirs=["transformer"]
-        )
+        _make_diffusers_folder(tmp_path, "PartialModel", subdirs=["transformer"])
         pkgs = scanner.scan_models(tmp_path)
         assert len(pkgs) == 1
         pkg = pkgs[0]
@@ -63,12 +61,8 @@ class TestDiffusersInference:
         assert len(pkg.components) == 0
 
     def test_multiple_diffusers_packages(self, tmp_path: pathlib.Path) -> None:
-        _make_diffusers_folder(
-            tmp_path, "ModelA", subdirs=["transformer"]
-        )
-        _make_diffusers_folder(
-            tmp_path, "ModelB", subdirs=["vae"]
-        )
+        _make_diffusers_folder(tmp_path, "ModelA", subdirs=["transformer"])
+        _make_diffusers_folder(tmp_path, "ModelB", subdirs=["vae"])
         pkgs = scanner.scan_models(tmp_path)
         assert len(pkgs) == 2
         names = {p.name for p in pkgs}
@@ -167,9 +161,7 @@ class TestDescriptorPriority:
                 }
             },
         }
-        (folder / "comfygo-model.json").write_text(
-            json.dumps(desc), encoding="utf-8"
-        )
+        (folder / "comfygo-model.json").write_text(json.dumps(desc), encoding="utf-8")
         (folder / "model_index.json").write_text(
             json.dumps({"model_index": True}), encoding="utf-8"
         )

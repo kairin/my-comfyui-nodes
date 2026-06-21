@@ -23,7 +23,7 @@ def _make_package(
     folder = tmp_path / name
     folder.mkdir(parents=True, exist_ok=True)
     comp_list: list[models.Component] = []
-    for logical_name, categories in (components or []):
+    for logical_name, categories in components or []:
         comp_dir = folder / logical_name
         comp_dir.mkdir(exist_ok=True)
         comp_list.append(
@@ -45,7 +45,11 @@ def _make_package(
 class TestReconcileDryRun:
     def test_dry_run_reports_pending_views(self, tmp_path: pathlib.Path) -> None:
         """Dry-run should report views that need to be created."""
-        pkgs = [_make_package("TestModel", tmp_path, [("transformer", ["diffusion_models"])])]
+        pkgs = [
+            _make_package(
+                "TestModel", tmp_path, [("transformer", ["diffusion_models"])]
+            )
+        ]
         report = reconciler.reconcile(pkgs, tmp_path, dry_run=True)
         # Even in dry-run, views_created lists what WOULD be created.
         assert len(report.views_created) == 1
@@ -215,9 +219,7 @@ class TestReconcileApply:
         assert len(report.warnings) >= 1
         assert len(report.views_created) == 0
 
-    def test_skips_component_symlink_escape(
-        self, tmp_path: pathlib.Path
-    ) -> None:
+    def test_skips_component_symlink_escape(self, tmp_path: pathlib.Path) -> None:
         """A component symlink resolving outside the model root is skipped."""
         folder = tmp_path / "EscapeModel"
         folder.mkdir()
@@ -252,9 +254,7 @@ class TestReconcileApply:
 
 
 class TestConflictHandling:
-    def test_conflict_two_packages_same_view(
-        self, tmp_path: pathlib.Path
-    ) -> None:
+    def test_conflict_two_packages_same_view(self, tmp_path: pathlib.Path) -> None:
         """Two packages whose components map to the same view path."""
         pkg_a = _make_package(
             "ConflictModel", tmp_path, [("transformer", ["diffusion_models"])]
@@ -270,9 +270,7 @@ class TestConflictHandling:
         assert len(report.views_created) == 1
         assert len(report.conflicts) >= 1
 
-    def test_different_components_no_conflict(
-        self, tmp_path: pathlib.Path
-    ) -> None:
+    def test_different_components_no_conflict(self, tmp_path: pathlib.Path) -> None:
         """Same model name but different component names."""
         pkg_a = _make_package(
             "SharedName", tmp_path, [("transformer", ["diffusion_models"])]
@@ -288,9 +286,7 @@ class TestConflictHandling:
 
 
 class TestIdempotencyReporting:
-    def test_reapply_reports_no_new_created(
-        self, tmp_path: pathlib.Path
-    ) -> None:
+    def test_reapply_reports_no_new_created(self, tmp_path: pathlib.Path) -> None:
         """Re-running apply on already-correct state reports 0 created."""
         pkg = _make_package(
             "IdempotentModel", tmp_path, [("transformer", ["diffusion_models"])]
@@ -331,15 +327,11 @@ class TestGroupedViews:
 
 
 class TestViewSafety:
-    def test_rejects_symlinked_views_root(
-        self, tmp_path: pathlib.Path
-    ) -> None:
+    def test_rejects_symlinked_views_root(self, tmp_path: pathlib.Path) -> None:
         """A symlinked .comfygo_views root must stop all view operations."""
         outside = tmp_path / "outside-views"
         outside.mkdir()
-        compat_views.views_root(tmp_path).symlink_to(
-            outside, target_is_directory=True
-        )
+        compat_views.views_root(tmp_path).symlink_to(outside, target_is_directory=True)
         pkgs = [
             _make_package(
                 "SafeModel",
@@ -352,21 +344,15 @@ class TestViewSafety:
 
         assert len(report.views_created) == 0
         assert report.warnings
-        assert not (
-            outside / "diffusion_models" / "SafeModel" / "transformer"
-        ).exists()
+        assert not (outside / "diffusion_models" / "SafeModel" / "transformer").exists()
 
-    def test_dry_run_skips_symlinked_view_dirs(
-        self, tmp_path: pathlib.Path
-    ) -> None:
+    def test_dry_run_skips_symlinked_view_dirs(self, tmp_path: pathlib.Path) -> None:
         """Dry-run stale pruning must not traverse symlinked view dirs."""
         vroot = compat_views.views_root(tmp_path)
         vroot.mkdir()
         outside = tmp_path / "outside-category"
         outside.mkdir()
-        (vroot / "diffusion_models").symlink_to(
-            outside, target_is_directory=True
-        )
+        (vroot / "diffusion_models").symlink_to(outside, target_is_directory=True)
 
         report = reconciler.reconcile([], tmp_path, dry_run=True)
 

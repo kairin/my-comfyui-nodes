@@ -1,20 +1,20 @@
 <!--
-  Sync Impact Report — uv-first amendment
+  Sync Impact Report — constitution rerun for changelog, branch protection, safety nets
 
-  Version change: 1.0.0 → 1.1.0
+  Version change: 1.1.0 → 1.2.0
   Modified principles:
-    - VI. uv And direnv First → VI. uv First, direnv For Local Env
-  Added sections:
-    - Repository uv-first checks in agent-facing templates
+    - (none)
+  Added sections/principles:
+    - VIII. Maintain Comprehensive Changelog
+    - IX. Enforce Branch Protection and Safety Nets
   Removed sections: (none)
   Templates requiring updates:
-    - ✅ .specify/templates/plan-template.md — uv-first Constitution Check gate added
-    - ✅ .specify/templates/spec-template.md — uv-first policy requirement added
-    - ✅ .specify/templates/tasks-template.md — uv-first generated-task rule added
-    - ✅ .specify/templates/commands/ — directory does not exist yet
-    - ✅ docs/workflow.md — runtime direnv helper and uv-compatible workflow documented
-    - ✅ AGENTS.md — uv-first agent guidance added
-  Follow-up TODOs: none
+    - ✅ .specify/templates/plan-template.md — mention new principles in Constitution Check
+    - ⚠️ docs/ and README if they reference principles (review)
+  Follow-up TODOs:
+    - Implement root CHANGELOG.md
+    - Strengthen GitHub branch protection (add required reviews/status checks)
+    - Ensure Codacy gate policy covers new safety requirements
 -->
 
 # my-comfyui-nodes Constitution
@@ -98,6 +98,22 @@ appropriate. Python custom-node changes require a ComfyUI backend restart.
 Browser auto-refresh MUST NOT be assumed; users may need to refresh an
 already-open ComfyUI tab manually.
 
+### VIII. Maintain Comprehensive Changelog
+
+The project MUST maintain a root-level CHANGELOG.md documenting all user-facing
+and significant internal changes. Entries MUST follow a standard format (e.g.
+Keep a Changelog) with dated sections, change types (Added, Changed, Fixed,
+etc.), and references to specs/PRs where applicable. The changelog is the
+canonical public history and MUST NOT contain secrets or private details.
+
+### IX. Enforce Branch Protection and Safety Nets
+
+The default branch (main) MUST have branch protection rules enabled. Relevant
+safety nets (required PR reviews, status checks from CI/quality tools such as
+Codacy, secret scanning, Dependabot) MUST be configured and kept active.
+Changes to protection or tool configurations SHOULD be reviewed. Violations or
+gaps in protection MUST be treated as HIGH priority remediation items.
+
 ## Operational Constraints
 
 - Keep full vendored copies of selected custom nodes under `custom_nodes/`.
@@ -109,6 +125,10 @@ already-open ComfyUI tab manually.
   or local env files.
 - Do not add direct `pip`, `python -m pip`, or non-uv Python workflow commands
   to scripts, specs, plans, task lists, or docs.
+
+- **Pre-commit quality enforcement**: All code changes MUST pass local verification
+  (pre-commit hooks + `./scripts/verify-quality.sh`) *before* any `git commit` or `git push`.
+  Codacy is the final gate only. Sloppy code must never reach the repository.
 
 ## Development Workflow
 
@@ -144,4 +164,4 @@ The constitution takes precedence over feature specs and implementation plans.
 - Complexity introduced in plans or specs that conflicts with a principle
   MUST be justified in a Complexity Tracking table.
 
-**Version**: 1.1.0 | **Ratified**: 2026-06-20 | **Last Amended**: 2026-06-20
+**Version**: 1.2.0 | **Ratified**: 2026-06-20 | **Last Amended**: 2026-06-21

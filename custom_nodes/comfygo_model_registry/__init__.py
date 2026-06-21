@@ -58,10 +58,7 @@ def _run_registry() -> None:
 
     models_dir = pathlib.Path(str(raw)).resolve()
     if not models_dir.is_dir():
-        print(
-            f"comfygo_model_registry: models_dir '{models_dir}' not found — "
-            f"skipping"
-        )
+        print(f"comfygo_model_registry: models_dir '{models_dir}' not found — skipping")
         return
 
     # Scan the model root plus legacy paths.
@@ -86,20 +83,14 @@ def _run_registry() -> None:
             for category in comp.comfy_categories:
                 if category in registered_categories:
                     continue
-                view_category_dir = (
-                    compat_views.views_root(models_dir) / category
-                )
+                view_category_dir = compat_views.views_root(models_dir) / category
                 if view_category_dir.is_dir():
-                    folder_paths.add_model_folder_path(
-                        category, str(view_category_dir)
-                    )
+                    folder_paths.add_model_folder_path(category, str(view_category_dir))
                     registered_categories.add(category)
 
     if registered_categories:
         cats = ", ".join(sorted(registered_categories))
-        print(
-            f"comfygo_model_registry: registered views for categories: {cats}"
-        )
+        print(f"comfygo_model_registry: registered views for categories: {cats}")
 
 
 # Run the registry at import time during ComfyUI startup unless a CLI or test
