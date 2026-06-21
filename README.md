@@ -61,6 +61,8 @@ upstream creator repos
 
 ## Sync To ComfyUI
 
+**Remember one command: `comfygo`** (with subcommands for `doctor`, `models enrich`, `sync`, `refresh-upstreams`, `patch-*`, etc.). All normal daily operations (launch with settings/patches/verify/tmux, enrichment, diagnostics, etc.) are available under this single memorable entry point. Direct script paths are implementation details for bootstrap, contributors, or debugging only.
+
 For normal use, use the one-word launcher:
 
 ```bash
@@ -149,7 +151,9 @@ not part of this public repo. `comfygo`, `comfygo start`, and `comfygo restart`
 import this runtime direnv environment before launching ComfyUI, so token
 variables are available to the backend process after restart.
 
-The lower-level sync script is still available:
+**Primary path: `comfygo sync`** (and `comfygo sync --dry-run` equivalent via the dispatcher once `scripts/` is on PATH via direnv). This is the single entry point for normal use.
+
+The direct script form is still available for bootstrap/automation that does not assume direnv (advanced):
 
 ```bash
 COMFYUI_DIR=/path/to/ComfyUI ./scripts/install-to-comfyui.sh
@@ -164,10 +168,13 @@ Dry run:
 COMFYUI_DIR=/path/to/ComfyUI ./scripts/install-to-comfyui.sh --dry-run
 ```
 
-## Comfy CLI Wrappers
+## Comfy CLI Wrappers (bootstrap / advanced)
 
-These wrappers work even if the `comfy local-nodes` patch has not been applied to
-your comfy-cli fork.
+**Primary (once `comfygo` is in PATH via direnv):** use the single entry point subcommands
+`comfygo update`, `comfygo install`, `comfygo patch-cli`, `comfygo sync` etc. (see command map above).
+
+These direct wrappers work even if the `comfy local-nodes` patch has not been applied to
+your comfy-cli fork (bootstrap case):
 
 ```bash
 COMFYUI_DIR=/path/to/ComfyUI ./scripts/comfy-launch-with-local-nodes.sh -- --listen 127.0.0.1 --port 8188
@@ -181,13 +188,17 @@ If the comfy-cli patch is applied, you can also run:
 uv run comfy --workspace /path/to/ComfyUI local-nodes sync --repo "$PWD"
 ```
 
-Apply or re-apply the comfy-cli patch to a local comfy-cli checkout with:
+Apply or re-apply the comfy-cli patch to a local comfy-cli checkout with (or use `comfygo patch-cli` after setup):
 
 ```bash
 COMFY_CLI_DIR=/path/to/comfy-cli ./scripts/apply-comfy-cli-patches.sh
 ```
 
 ## Refresh From Upstreams
+
+**Primary: `comfygo refresh-upstreams`** (see command map), then `git diff`, review, commit, then `comfygo sync` or `comfygo`.
+
+Direct form (for non-direnv automation or bootstrap):
 
 Pull fresh upstream copies into this repo, then review and commit the resulting
 diff:

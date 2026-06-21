@@ -32,4 +32,5 @@
 ## Notes
 
 - This spec captures the full set of user requirements gathered across the conversation (patching primary, tmux launch orchestration with up-front settings, patch resilience with versioned public docs, HF git-clone + Civitai enrichment, remote SSH single-terminal use, privacy, and preservation of existing speckit work).
-- Ready for `/speckit-plan`.
+- See cli.md and automation.md for the detailed requirements-quality questions (e.g. on clarity of "verification steps", tmux/settings effects, enrichment integration, rich JSON structure) that were generated from this spec. Many were addressed via post-plan clarifications (see spec Clarifications and adversarial-review.md). The pre-plan checklist below reflects initial readiness for planning; detailed gaps were tracked in tasks and clarified later.
+- Post-clarify status: see adversarial-review.md for remediation applied.

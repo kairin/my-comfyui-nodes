@@ -42,11 +42,10 @@ $COMFYUI_MODELS_DIR/
 3. **Launch** ComfyUI — existing nodes can browse model files from the standard
    category dropdowns.
 
-For new downloads, use the included helper so files arrive in that canonical
-folder with metadata:
+For new downloads, use `comfygo models enrich` (the single entry point form of the included model enrichment helper; direct `scripts/hf-select-download` for bootstrap only) so files arrive in that canonical folder with metadata:
 
 ```bash
-scripts/hf-select-download https://huggingface.co/owner/example-model \
+comfygo models enrich https://huggingface.co/owner/example-model \
   --package-name Example-Model-Package \
   --models-root $COMFYUI_MODELS_DIR
 ```
@@ -69,7 +68,7 @@ This helper:
 To resume from an existing package folder after moving/renaming it, use:
 
 ```bash
-scripts/hf-select-download \
+comfygo models enrich \
   --resume-from /path/to/renamed/package/folder
 ```
 
@@ -82,7 +81,7 @@ the folder directly. If metadata is missing, the helper will prompt for a URL:
 
 ```bash
 cd $COMFYUI_MODELS_DIR/example-model
-scripts/hf-select-download .
+comfygo models enrich .
 ```
 
 When prompted, paste:
@@ -95,7 +94,7 @@ That stores the source metadata in `.comfygo-download.json` so future runs can b
 started with only:
 
 ```bash
-scripts/hf-select-download .
+comfygo models enrich .
 ```
 
 On each `comfygo`/`comfygo start`/`comfygo restart`, the registry
@@ -197,8 +196,10 @@ managed folder. GC is dry-run by default and does not create, move, or delete
 anything unless both `-f NAME` and `--apply` are supplied.
 
 ```bash
-scripts/comfygo-models.sh gc --models-dir "$COMFYUI_MODELS_DIR"
+comfygo models gc --models-dir "$COMFYUI_MODELS_DIR"
 ```
+
+(Advanced/raw registry form `scripts/comfygo-models.sh` also works for power users; prefer the single entry point.)
 
 Example dry-run output:
 
@@ -215,7 +216,7 @@ Ambiguous:
 To quarantine a specific managed folder:
 
 ```bash
-scripts/comfygo-models.sh gc --models-dir "$COMFYUI_MODELS_DIR" \
+comfygo models gc --models-dir "$COMFYUI_MODELS_DIR" \
   -f Old-Test-Model --apply
 ```
 
@@ -252,7 +253,7 @@ run `comfygo`.
 - The synced runtime copy exists under ComfyUI's `custom_nodes/`.
 - The configured model root is readable.
 - `uv` is installed and available.
-- `scripts/comfygo-models.sh --models-dir "$MODEL_ROOT" reconcile` completes
+- `comfygo models reconcile --models-dir "$MODEL_ROOT"` (or the raw `scripts/comfygo-models.sh` form for advanced use) completes
   in dry-run mode with no pending creates, prunes, or conflicts.
 - A deterministic before/after snapshot confirms the dry-run did not create,
   remove, or alter `.comfygo_views/`.
@@ -261,8 +262,8 @@ Pending registry changes are not considered healthy by default. Run the dry-run
 to inspect the proposed changes, then apply them explicitly:
 
 ```bash
-scripts/comfygo-models.sh --models-dir "$TEST_DIR" reconcile
-scripts/comfygo-models.sh --models-dir "$TEST_DIR" reconcile --apply
+comfygo models reconcile --models-dir "$TEST_DIR"
+comfygo models reconcile --models-dir "$TEST_DIR" --apply
 ```
 
 ### GC Safety Doctor

@@ -40,12 +40,16 @@
 
 3. Add new HF models in canonical model folders:
 
+   **Use the single entry point:** `comfygo models enrich ...` (the model enrichment helper; supports HF git-clone or loose files + optional Civitai when token present).
+
    ```bash
-   scripts/hf-select-download owner/model-repo \
+   comfygo models enrich owner/model-repo \
      --models-root "$COMFYUI_MODELS_DIR" \
      --package-name Model-Folder-Name
    comfygo models reconcile --apply
    ```
+
+   (Direct `scripts/hf-select-download` remains for bootstrap/non-direnv; prefer `comfygo models enrich` for normal use per single entry point.)
 
 4. If a shell under the ComfyUI runtime root needs Hugging Face or other local
 
@@ -166,7 +170,9 @@ See root `CHANGELOG.md`. All user-facing and significant changes are recorded th
 
 ## Updating Upstream Node Code
 
-1. Refresh vendored node folders:
+**Primary (normal use):** `comfygo refresh-upstreams`, `git diff`, review, commit, then `comfygo sync`.
+
+1. Refresh vendored node folders (direct form for non-direnv/bootstrap):
 
    ```bash
    ./scripts/update-from-upstreams.sh
@@ -180,27 +186,31 @@ See root `CHANGELOG.md`. All user-facing and significant changes are recorded th
 
 3. Resolve conflicts or restore files as needed.
 4. Commit the result.
-5. Sync into ComfyUI.
+5. Sync into ComfyUI (use `comfygo sync`).
 
 ## ComfyUI Core Patches
 
+**Primary (normal use after initial setup):** `comfygo patch-comfyui`.
+
 ComfyUI core changes are kept as patch files in `comfyui-patches/`. Apply them
-with:
+with (bootstrap / when patch not yet in runtime):
 
 ```bash
 COMFYUI_DIR=/path/to/ComfyUI ./scripts/apply-comfyui-patches.sh
 ```
 
 If a patch no longer applies after updating ComfyUI, review the upstream change
-and refresh the patch from the live ComfyUI checkout.
+and refresh the patch from the live ComfyUI checkout. Use `comfygo patch-comfyui` for the single entry point path once set up.
 
 ## Comfy CLI Patch
+
+**Primary (normal use after setup):** `comfygo patch-cli`.
 
 The local comfy-cli integration is stored as a patch under `comfy-cli-patches/`
 after it is generated. The wrapper scripts in this repo do not depend on that
 patch, so they keep working even when comfy-cli is reset or updated.
 
-Apply the patch to a local comfy-cli checkout with:
+Apply the patch to a local comfy-cli checkout with (or use `comfygo patch-cli`):
 
 ```bash
 COMFY_CLI_DIR=/path/to/comfy-cli ./scripts/apply-comfy-cli-patches.sh
@@ -216,3 +226,16 @@ When filing, reference:
 - Confirmation that quality gates were run (`./scripts/verify-quality.sh` green)
 
 This supports solo-maintainer protections and clear tracking for the 004 feature (patching, tmux launch, enrichment).
+
+### Enrichment examples (T063)
+Example for HF git-clone + Civitai:
+```
+# with CIVITAI_TOKEN and HF_TOKEN in direnv
+comfygo models enrich /path/to/hf-cloned-model
+# or loose
+comfygo models enrich /path/to/model.safetensors
+```
+Results in HF layout + civitai/ side folder + comfygo-model.json with source hf + civitai (if match), usable by registry.
+See scripts/hf_select_download.py --help and spec Key Entities for the JSON shape.
+Run after `comfygo` launch if COMFYGO_ENRICH_CIVITAI=1.
+Basic on no token: local info only, no secrets.

@@ -50,6 +50,16 @@ expected nodes, and launch ComfyUI. It MUST NOT silently perform risky upstream
 upgrades, destructive deletes, or secret-dependent operations without clear user
 intent.
 
+The single entry point principle reinforces this: all user-facing documentation,
+examples, quickstarts, README flows, and daily guidance MUST present `comfygo`
+(and its subcommands such as `comfygo doctor`, `comfygo models enrich`,
+`comfygo sync`) as the one command users need to remember and type. Direct paths
+to `scripts/comfy-local`, `scripts/hf-select-download`, `scripts/update-from-upstreams.sh`,
+etc. are implementation details. They belong in "For contributors", "Quality gates",
+"Power users", or "Debugging" sections only. This reduces cognitive load for the
+solo SSH maintainer use-case and aligns governance with the implemented facade
+(`scripts/comfygo` thin wrapper dispatching to `comfy-local`).
+
 ### IV. Patch Durability
 
 Local amendments to ComfyUI core and comfy-cli MUST be stored as patch files in
@@ -164,4 +174,6 @@ The constitution takes precedence over feature specs and implementation plans.
 - Complexity introduced in plans or specs that conflicts with a principle
   MUST be justified in a Complexity Tracking table.
 
-**Version**: 1.2.0 | **Ratified**: 2026-06-20 | **Last Amended**: 2026-06-21
+**Version**: 1.2.1 | **Ratified**: 2026-06-20 | **Last Amended**: 2026-06-22
+
+<!-- 005-single-entrypoint: PATCH bump for single entry point principle reinforcement (clarification under existing III. Safe Daily Operation per Governance rules; no new numbered principle). See specs/005-single-entrypoint/ and 004 Phase 12 T073. -->

@@ -31,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reran constitution (v1.2.0) adding principles for Changelog and Branch Protection/Safety Nets; propagated to plan template.
 - Seeded and enhanced 004 feature artifacts (spec, plan, tasks) and root CHANGELOG.
 
+### Changed (005-single-entrypoint - docs + constitution single entry point alignment)
+- README.md, docs/workflow.md, and docs/model-library.md updated so all primary user-facing examples and flows lead with `comfygo` (or `comfygo <subcommand>` such as `comfygo models enrich`); direct `scripts/...` paths de-emphasized to explicit "bootstrap / advanced / contributor" sections only, with redirects to the single entry point. Added prominent "Remember one command: `comfygo`" callout.
+- Constitution III. Safe Daily Operation reinforced with explicit "single entry point principle" paragraph (users remember and use only `comfygo` + subcommands for daily ops; internals for contributors/debug only).
+- (Partial for US1; full completion including model-library HF renames + final constitution version bump + full CHANGELOG polish in US2 tasks T019 etc.)
+- See specs/005-single-entrypoint/ (plan + tasks) and 004 Phase 12 T072/T073 for traceability.
+
 ### Security / Ops
 - Verified current GitHub branch protection (exists but minimal reviews/checks) and Codacy setup (Gate Policy + many tools active). Documented practical solo-maintainer settings (require PRs + status checks; 0 reviews; Codacy check required but grade not blocking). See issue #95 and workflow.md.
 

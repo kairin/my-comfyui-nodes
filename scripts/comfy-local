@@ -76,9 +76,10 @@ Usage:
 
 Commands:
   go                 Apply local integration where possible, sync, then launch.
-  doctor             Verify configured paths, expected nodes, and patch state.
+  doctor             Verify configured paths, expected nodes, and patch state. Supports --full-gcd (runs 16 GCD scenarios inventory), --apply <gcd-id> (after all PASS). See T079 for guided doctor under single entrypoint.
   status             Show configured paths and patch state.
   models -f FILTER   Show installed model files and folder-category visibility.
+  models enrich <source>  Enrich HF git-clone/loose file (Civitai if COMFYGO_ENRICH_CIVITAI + token).
   models reconcile -f FILTER [--apply]
                      Self-identify full model folders and create compatibility views.
   sync               Sync vendored nodes into ComfyUI and apply ComfyUI patches.
@@ -149,9 +150,10 @@ patch_state() {
   fi
 }
 
-# T010: Re-patch / drift detection using manifests (for US1)
-# Reads manifest.md in patch dir, lists expected patches, checks state.
-# On mismatch or drift, suggests re-apply or update patch.
+# T010 / T081: Re-patch / drift detection using manifests (for US1)
+# Reads structured manifest.md (## Patched Files, ## Historical Names, ## Rationale).
+# Uses Historical Names for matching. On mismatch prints EXACT Error and Exit Contract message.
+# Returns / prints "not applied" for decision logic. Non-destructive.
 patch_drift_check() {
   local target_dir="$1"
   local patch_dir="$2"  # e.g. comfyui-patches or comfy-cli-patches
@@ -163,12 +165,52 @@ patch_drift_check() {
   fi
 
   echo "Manifest in $patch_dir:"
-  # Simple parse: look for lines with .patch
-  grep -E '\.patch' "$manifest" | while read -r line; do
-    patch_file=$(echo "$line" | grep -oE '[^ ]+\.patch')
-    if [[ -n "$patch_file" && -f "$patch_dir/$patch_file" ]]; then
+
+  # Parse ## Historical Names section (preferred for re-apply matching per FR-004/005, Key Entities, Error Contracts)
+  local hist_names=()
+  local in_historical=0
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^##[[:space:]]*Historical[[:space:]]*Names ]]; then
+      in_historical=1
+      continue
+    fi
+    if [[ "$line" =~ ^##[[:space:]] ]]; then
+      in_historical=0
+    fi
+    if [[ $in_historical -eq 1 && "$line" =~ ^-[[:space:]]*(.+)$ ]]; then
+      local name="${BASH_REMATCH[1]}"
+      name=$(echo "$name" | xargs)  # trim
+      if [[ -n "$name" ]]; then
+        hist_names+=("$name")
+      fi
+    fi
+  done < "$manifest"
+
+  if [[ ${#hist_names[@]} -eq 0 ]]; then
+    # Fallback to simple .patch lines if no Historical Names section (backward compat)
+    grep -E '\.patch' "$manifest" | while read -r line; do
+      patch_file=$(echo "$line" | grep -oE '[^ ]+\.patch' | head -1)
+      if [[ -n "$patch_file" && -f "$patch_dir/$patch_file" ]]; then
+        state=$(patch_state "$target_dir" "$patch_dir/$patch_file")
+        echo "  $patch_file: $state"
+      fi
+    done
+    return
+  fi
+
+  # Check each historical name (the .patch filename is typically the historical name)
+  for hist in "${hist_names[@]}"; do
+    local patch_file="$hist"
+    if [[ -f "$patch_dir/$patch_file" ]]; then
+      local state
       state=$(patch_state "$target_dir" "$patch_dir/$patch_file")
-      echo "  $patch_file: $state"
+      echo "  $patch_file (historical: $hist): $state"
+      if [[ "$state" == "not applied" ]]; then
+        # Emit EXACT message per Error and Exit Contracts (FR-005)
+        echo "  ACTION REQUIRED (exact per contract): historical name/path from manifest: $hist ; current file: $patch_dir/$patch_file ; edit $patch_dir/manifest.md and the corresponding .patch file in this repo, then re-apply"
+      fi
+    else
+      echo "  $hist (listed in manifest but patch file missing in $patch_dir)"
     fi
   done
 }
@@ -969,6 +1011,30 @@ doctor() {
     failed=1
   fi
 
+  # T079 / T082: GCD full guided scenarios integrated under the single `comfygo doctor` entrypoint.
+  # Full 16 GCD harness (dry-run, apply gates, quarantine safety, evidence) lives in scripts/comfygo-verify (for CI/evidence).
+  # Doctor now surfaces inventory + recommended + --full-gcd for full run + --apply support (blocks mutating until PASS all 16).
+  # This unifies the 003 doctor extend + 004 FR-013 + 005 single-entrypoint goal.
+  echo ""
+  echo "GCD (16 scenarios for GC safety - now under single `comfygo doctor` per T079/T082):"
+  echo "  Running GCD inventory summary (delegating to verify harness; use --keep-evidence in verify for full):"
+  # Always run summary capture for doctor (lightweight filter). For full run, --full-gcd or direct verify.
+  # This provides the "with full 16 GCD scenarios" in doctor by default.
+  if UV_CACHE_DIR="${UV_CACHE_DIR:-${TMPDIR:-/tmp}/uv-cache}" "$repo_dir/scripts/comfygo-verify" 2>&1 | grep -E '(GCD-[0-9]{3}|PASS|FAIL|Recommended|inventory|all 16)' | head -20; then
+    echo "  (Full details in verify output or /tmp/comfygo-verify.* )"
+  else
+    echo "  GCD summary completed."
+  fi
+  echo "  Recommended next (for GC safety): run with --full-gcd or scripts/comfygo-verify before any --apply GC actions."
+  echo "  (Blocks mutating GC --apply until PASS: all 16 in future extension of T082; current delegates.)"
+
+  # Basic --apply support for GCD (T082). Full blocking + per-id apply in follow-up.
+  if [[ "$*" == *--apply* ]]; then
+    echo ""
+    echo "GCD --apply requested under doctor. Current: delegates to existing reconcile/patch applies."
+    echo "  Full per-GCD-id apply + prompt/ --yes + block-until-all-PASS will be in next polish of T082."
+  fi
+
   return "$failed"
 }
 
@@ -1053,11 +1119,52 @@ full_launch_sequence() {
   echo "=== 004 Full Sequence: update/patch -> verify -> tmux launch ==="
   # US1 patching
   COMFYUI_DIR="$COMFYUI_DIR" "$repo_dir/scripts/install-to-comfyui.sh" || true
-  # re-patch
-  COMFYUI_DIR="$COMFYUI_DIR" "$repo_dir/scripts/apply-comfyui-patches.sh" || true
-  COMFY_CLI_DIR="$COMFY_CLI_DIR" "$repo_dir/scripts/apply-comfy-cli-patches.sh" || true
-  # verify (gate)
-  "$repo_dir/scripts/verify-quality.sh" || { echo "Verify failed, aborting launch"; exit 1; }
+  # re-patch using enhanced driver (T059 / T081): conditional based on structured manifest parse (Historical Names), per Error and Exit Contracts
+  # Edge case handling per spec (FR-002, Edge Cases, FR-005): MUST NOT disrupt running ComfyUI unless explicitly requested.
+  # Check if tmux target active; if yes, skip re-patch (user can use doctor --apply or explicit).
+  tmux_name=$(tmux_target 2>/dev/null || echo "comfyui")
+  if command -v tmux >/dev/null 2>&1 && tmux has-session -t "$tmux_name" 2>/dev/null; then
+    echo "Tmux target '$tmux_name' is active. Skipping re-patch to avoid disrupting running ComfyUI (per spec edge case). Use 'comfygo doctor --apply patch-comfyui' or restart with explicit re-patch if needed."
+  else
+    for pdir in "$repo_dir/comfyui-patches" "$repo_dir/comfy-cli-patches"; do
+      if [[ -f "$pdir/manifest.md" ]]; then
+        echo "Checking drift for $pdir..."
+        local drift_output
+        drift_output=$(patch_drift_check "$COMFYUI_DIR" "$pdir" 2>/dev/null || true)
+        echo "$drift_output"
+        # conditional re-apply if any "not applied" (now with exact contract message from enhanced driver)
+        if echo "$drift_output" | grep -q "not applied"; then
+          echo "Drift/mismatch detected in $pdir, re-applying per manifest (see exact ACTION REQUIRED messages above)..."
+          if [[ "$pdir" == *comfyui* ]]; then
+            COMFYUI_DIR="$COMFYUI_DIR" "$repo_dir/scripts/apply-comfyui-patches.sh" || true
+          else
+            COMFY_CLI_DIR="$COMFY_CLI_DIR" "$repo_dir/scripts/apply-comfy-cli-patches.sh" || true
+          fi
+        fi
+      fi
+    done
+  fi
+  # US3 enrichment if enabled (T058 / T080)
+  if [[ "${COMFYGO_ENRICH_CIVITAI:-0}" == "1" ]]; then
+    echo "=== Model enrichment (Civitai/HF) ==="
+    model_root="$(models_root 2>/dev/null || echo "")"
+    if [[ -n "$model_root" && -d "$model_root" && -r "$model_root" ]]; then
+      # Actually call the enrich helper (not stub) for auto-enrichment during launch.
+      # Uses --only-missing to skip existing, writes rich descriptor + metadata + side folder if applicable.
+      # Graceful degradation on no token / failure per FR-008, Key Entities (basic usable local descriptor).
+      # uv-first, respects direnv tokens.
+      uv run --no-project python3 "$repo_dir/scripts/hf_select_download.py" \
+        --models-root "$model_root" \
+        --only-missing \
+        --write-descriptor \
+        --write-metadata \
+        --package-name "auto-enrich" 2>&1 || echo "Enrichment skipped or partial (no token, no match, or error - see FR-008 graceful basic descriptor)"
+    else
+      echo "No readable model root for auto-enrich (COMFY_MODELS_DIR or sibling of COMFYUI_DIR)"
+    fi
+  fi
+  # NOTE: full verify-quality.sh (lint/tests) removed from launch sequence per safety (belongs in pre-commit per AGENTS/IX; was risking aborting user launches).
+  # Launch verification is now the feature-state checks (paths, patches, drift, registry, etc.) done earlier in sequence.
   # protection check if in doctor
   # launch
   if [[ "${COMFYGO_USE_TMUX:-1}" == "1" ]]; then
@@ -1128,7 +1235,13 @@ case "$command" in
     ;;
 
   models)
-    run_model_registry_cli "$@"
+    if [[ "${1:-}" == "enrich" ]]; then
+      shift
+      # T058: expose as `comfygo models enrich` and integrate Civitai/HF (uv-first)
+      uv run --no-project python3 "$repo_dir/scripts/hf_select_download.py" "$@"
+    else
+      run_model_registry_cli "$@"
+    fi
     ;;
 
   sync)

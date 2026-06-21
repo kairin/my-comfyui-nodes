@@ -127,6 +127,30 @@ def _read_token() -> str:
     return ""
 
 
+def _fetch_civitai(model_name: str, token: str) -> Optional[Dict[str, Any]]:
+    if not token or not model_name:
+        return None
+    query = urllib.parse.quote(model_name)
+    url = f"https://civitai.com/api/v1/models?query={query}&limit=1"
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=30) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            if data.get("items"):
+                item = data["items"][0]
+                return {
+                    "id": item.get("id"),
+                    "name": item.get("name"),
+                    "type": item.get("type"),
+                    "nsfw": item.get("nsfw"),
+                    "description": item.get("description"),
+                }
+    except Exception as e:
+        print(f"Civitai query failed for {model_name}: {e}")
+    return None
+
+
 def _hf_env(token: str) -> Dict[str, str]:
     env = os.environ.copy()
     if token:
@@ -636,6 +660,7 @@ def _build_descriptor_payload(
     note: str,
     category_overrides: Dict[str, List[str]],
     use_descriptor: bool,
+    civitai: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
     if not use_descriptor:
         return None
@@ -681,6 +706,8 @@ def _build_descriptor_payload(
         },
         "components": components,
     }
+    if civitai:
+        descriptor["source"]["civitai"] = civitai
 
     if note:
         descriptor["notes"] = note
@@ -1106,6 +1133,13 @@ def main() -> int:
         print(_redact_token(str(err), token), file=sys.stderr)
         return 1
 
+    civitai = None
+    civitai_token = os.getenv("CIVITAI_TOKEN") or os.getenv("CIVITAI_API_TOKEN", "")
+    if civitai_token and package_name:
+        civitai = _fetch_civitai(package_name, civitai_token)
+        if civitai:
+            print(f"Civitai match: {civitai.get('name')}")
+
     if package_mode:
         if args.write_descriptor:
             descriptor_payload = _build_descriptor_payload(
@@ -1117,6 +1151,7 @@ def main() -> int:
                 note=args.descriptor_note,
                 category_overrides=category_overrides,
                 use_descriptor=True,
+                civitai=civitai,
             )
 
             if descriptor_payload:
@@ -1128,6 +1163,14 @@ def main() -> int:
                 else:
                     _write_json(descriptor_path, descriptor_payload)
                     print(f"wrote descriptor: {descriptor_path}")
+
+            if civitai:
+                civitai_dir = output_dir / "civitai"
+                civitai_dir.mkdir(parents=True, exist_ok=True)
+                (civitai_dir / "info.json").write_text(
+                    json.dumps(civitai, indent=2) + "\n", encoding="utf-8"
+                )
+                print(f"wrote civitai side folder: {civitai_dir}")
 
         if args.write_metadata:
             metadata_path = output_dir / args.metadata_file

@@ -77,25 +77,27 @@ Existing structure is kept.
 
 - New config loading for up-front settings: look in local direnv or a dotfile under the repo (ignored).
 - tmux launch: use `tmux new-window -n comfyui -- "..."` or similar, record the target, provide helpers to send commands to it.
-- Patch manifests: simple structured text/JSON listing touched paths + historical names. Driver compares current state to desired.
-- Enrichment: new or extended Python helper that talks to Civitai (token from env), HF (token), does the move/skeleton work, writes the JSON using the existing schema + extra source fields.
+- Patch manifests and re-patch driver: exact format, historical name matching rules, and conditional re-apply logic are defined in spec.md (Key Entities + Error and Exit Contracts) and tasks (cross-referenced to FR-004/FR-005). See also added data-model precision notes.
+- Enrichment: new or extended Python helper that talks to Civitai (token from env), HF (token), does the move/skeleton work, writes the JSON using the existing schema + extra source fields. Exact "rich" payload shape with HF + Civitai source (and graceful no-token degradation) defined in spec.md Key Entities and FR-008.
 - All changes must keep the existing `comfygo` / `comfy-local` entry points working.
 
 ## Risks & Mitigations
 
-- tmux not present: clear error + hint.
-- Breaking changes in Civitai/HF APIs: graceful fallback to local info + good error messages.
-- Patch matching is heuristic: always provide human-override path and clear "update the patch" instructions.
+- tmux not present: clear error + hint (see spec Edge Cases and Error and Exit Contracts).
+- Breaking changes in Civitai/HF APIs: must produce basic usable descriptor from local info only; never write secrets or crash (see spec FR-008 and Key Entities for exact degraded payload).
+- Patch matching must use manifest-driven historical names; on mismatch MUST emit explicit message with historical name + current file + "edit the patch in repo and re-apply" instruction (see spec FR-005, Edge Cases, and contracts). No silent corruption.
 
 ## Verification Approach
 
 See the approved high-level plan's Verification section (SSH simulation, sequential logs, tmux control retained, re-patch after simulated update, enrichment end-to-end, no private data leaked, existing harnesses still pass).
 
-## Next
+## Next (updated post 005 + new adversarial review 2026-06-22)
 
-Run /speckit-tasks (done), /speckit-taskstoissues (done), and /speckit-implement (in progress). Turn high-level items into GitHub issues (public-safe wording).
+005-single-entrypoint completed (docs/constitution enforcement for single `comfygo` entry point; see specs/005-single-entrypoint/ and cross-refs in 004 Phase 12/13 T072/T073 [X]).
 
-This plan stays deliberately at the level of the approved session plan. Concrete code changes are driven by tasks.md (with post-implement updates for actual code state).
+Current: 004 remains master feature. Phase 10/11 "impl" claims were partial (enrichment exposure done but auto in launch is stub; re-patch basic conditional but not fully structured per contracts; doctor extensions but full GCD not in main `comfygo doctor`). New adversarial review (adversarial-review.md) on all implementation before finishing remaining Phase 13 items (T079+ for doctor unification under single entry, actual enrich call in launch, structured re-patch driver).
+
+This plan updated with current state. Concrete code changes driven by tasks.md Phase 12/13. See new adversarial-review.md (2026-06-22) and this spec's new Clarifications session for pre-supplied clarifications before final impl. Re-run /speckit-clarify (using review), text audit, converge, gate before finishing remaining items.
 
 ## Solo Maintainer Branch Protection & Safety Nets (Good Enough)
 
@@ -117,12 +119,12 @@ Codacy:
 - Make the analysis check *required* in GitHub (for visibility and early feedback).
 - Grade/goals = guidance, not hard blockers while solo.
 
-Current verified state (2026-06-21):
-- Protection exists but currently has 0 reviews and no required checks (see gh api data).
-- Codacy has active Gate Policy + many analyzers (PMD, Bandit, Trivy, Checkov, Pylint, ShellCheck, etc.) and runs on PR/push.
-- Secret scanning + Dependabot already on.
+Current verified state (post 004 merge):
+- Protection requires PRs to main + Codacy "analysis" status check + conversation resolution. 0 approving reviews allowed (self-approval for owner). Enforce admins: off. Block force pushes/deletes: on. Codacy Gate Policy + core tools (including Bandit, ShellCheck, etc.) active and the analysis check is required in GitHub. Secret scanning + Dependabot on. See `docs/workflow.md` (protection section) and the 004 implementation PR for details.
 
-See `docs/workflow.md` (new section) and GitHub issue #95 for details. This balances safety nets with practicality for a solo SSH-based server workflow.
+Related constitution principles: VIII (Changelog) and IX (Branch Protection & Safety Nets).
+
+Tasks referencing this: T004, T005 in `tasks.md`.
 
 Related constitution principles: VIII (Changelog) and IX (Branch Protection & Safety Nets).
 

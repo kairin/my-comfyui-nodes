@@ -79,5 +79,5 @@ You can add the `source` line to your `~/.bashrc`, `~/.zshrc`, or direnv setup f
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/003-gc-doctor/plan.md
+at specs/004-comfygo-patched-tmux/plan.md
 <!-- SPECKIT END -->
