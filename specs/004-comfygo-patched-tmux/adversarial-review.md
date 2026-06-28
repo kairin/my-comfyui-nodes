@@ -1,6 +1,6 @@
 # Adversarial Review: Comfygo Patched Tmux Control (004) - Post-Implementation + 005 Consolidation
 
-**Feature**: specs/004-comfygo-patched-tmux  
+**Feature**: specs/004-comfygo-patched-tmux
 **Review Date**: 2026-06-22 (post-005-single-entrypoint implementation for docs/constitution, post Phase 12/13 append in 004/tasks.md, post consolidation cleanup to make 004 the master tracking feature)
 
 **Previous context**: Original adversarial review (2026-06-21) identified stale claims, vague language, missing precision in manifests/JSON/contracts, contradictions on optionality. Led to clarifications, spec/plan/tasks updates, Phase 10/11 impl claims for US3/enrich/re-patch, Phase 11 cleanups. 005 was then executed separately for single-entrypoint docs/constitution enforcement (per user request and constitution alignment). Recent work: 005 impl completed (README/workflow/model-library updated to lead with `comfygo`, constitution reinforced under III with "single entry point principle", version to 1.2.1, CHANGELOG, gates passed); 004 Phase 12/13 now tracks remaining with T072/T073 [X] cross-referenced to 005; feature.json and AGENTS marker point to 004 as consolidated master.

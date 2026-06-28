@@ -98,15 +98,6 @@
 - **FR-006**: System MUST authenticate users via [NEEDS CLARIFICATION: auth method not specified - email/password, SSO, OAuth?]
 - **FR-007**: System MUST retain user data for [NEEDS CLARIFICATION: retention period not specified]
 
-### Repository Policy Requirements
-
-- Features that invoke Python or comfy-cli commands MUST use uv-first command
-  forms: `uv run`, `uv pip --python <workspace-python>`, or
-  `uv run --python <workspace-python> --no-project python ...`.
-- Features MUST NOT introduce direct `pip`, `python -m pip`, or unwrapped
-  `python` workflow commands. If `uv` is missing, the feature must stop with an
-  instruction to install `uv` first.
-
 ### Key Entities *(include if feature involves data)*
 
 - **[Entity 1]**: [What it represents, key attributes without implementation]

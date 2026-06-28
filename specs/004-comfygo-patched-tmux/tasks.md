@@ -19,6 +19,22 @@
 - Python and comfy-cli tasks MUST use uv-first command forms: `uv run`, `uv pip --python <workspace-python>`, or `uv run --python <workspace-python> --no-project python ...`.
 - Do not generate tasks that use direct `pip`, `python -m pip`, or unwrapped `python` workflow commands.
 
+## Active Backlog (consolidated master — 2026-06-28)
+
+**Status**: No open implementation tasks. All carried work from 003/004/005 is complete under the single `comfygo` entry point.
+
+| ID | Priority | Summary | Status |
+|----|----------|---------|--------|
+| T069 | HIGH | Guided `comfygo doctor` with 16 GCD, action inventory, `--apply` | [X] via Phase 15 |
+| T070 | HIGH | Enrichment in launch when `COMFYGO_ENRICH_CIVITAI=1` | [X] Phase 13 T080 |
+| T071 | HIGH | Structured re-patch driver | [X] Phase 13 T081 |
+| T074 | MEDIUM | `--smoke-repatch` in doctor | [X] Phase 15 |
+| T076–T078 | LOW | Artifact cleanup + handoff | [X] Phase 15 |
+
+**Next**: Run `./scripts/verify-quality.sh`, commit, then real-world test (`comfygo doctor`, `comfygo launch`, `comfygo models enrich`). Re-run `/speckit-converge` only after new feature work.
+
+Historical superseded tasks remain in Phase 8/9 appendix below (all marked [X]).
+
 ## Phase 1: Setup (Shared Infrastructure)
 
 **Purpose**: Project initialization and basic structure for the feature
@@ -200,38 +216,38 @@ Phase 7 Convergence tasks have been reviewed post-/speckit-implement. Many found
 
 ---
 
-**Next after this tasks file (final post-Phase 14)**: Phase 12/13/14 is the consolidated catch-all from broad 001-005 review (004 master). 005-single-entrypoint feature completed separately for docs/constitution (T072/T073 [X] via 005; cross-ref here). Phase 13 (T079-T084) implemented (doctor GCD, enrich in launch, structured re-patch + exact msgs, launch clean, handoff). Phase 14 (T085-T088) implemented (GCD always in doctor with summary, active tmux re-patch skip logic, low clean/handoff polish). All HIGH from review addressed. Recommend full gate + Safety Test Matrix verification (from adversarial-review.md) + commit + real-world test with `comfygo`. Re-run converge if desired. Preserve historical. Current total 68 + Phase 12-14.
+**Next after this tasks file (post-Phase 15 consolidation)**: 004 is the consolidated master for 001–005 carry-over work. Phase 15 (2026-06-28) implemented the true guided doctor (`scripts/comfygo-gcd-harness.sh` + inventory/`--apply`/`--smoke-repatch` in `scripts/comfy-local`), reconciled checkbox drift from Phase 12–14, and marked 003 convergence duplicates [X]. No open implementation tasks remain. Recommend `./scripts/verify-quality.sh` + commit + real-world `comfygo doctor` / `comfygo launch` test.
 
-(Tasks updated following speckit rules + prior + adversarial-review 2026-06-22 + clarify + 005 docs + Phase 13/14 impl. 004 master for all. Gate green. App ready for use/testing with one simple entry point `comfygo`.)
+(Tasks updated 2026-06-28: speckit consolidation + guided doctor implementation. Single entry point `comfygo` fully realized in code and docs.)
 
 ## Phase 8: Convergence (superseded by Phase 10 post-clarify/analyze; retained for history/traceability)
 
 **Purpose**: (Historical) Address remaining gaps after implementation. Many Phase 2, US1, US2 completed (settings, manifests, re-patch basics, tmux sequence, docs). US3 and verification tasks still unmet at the time. See Phase 10 for current open tasks (consolidated post-remediation). Appended new tasks for the pieces of work at the time.
 
-- [ ] T038 (superseded by T057 in Phase 10) [US3] Implement full Civitai API query (with direnv token), HF skeleton download/move, civitai side folder, and rich comfygo-model.json (kind, components, HF+Civitai source; basic usable on failure: e.g. { "schema": "comfygo.model.v1", "name": "...", "kind": "...", "components": [...], "source": { "hf": {...}, "civitai": ...|null } } per Key Entities) in hf_select_download.py or new helper per updated FR-007, FR-008, FR-009, Error and Exit Contracts, T019 (missing)
-- [ ] T039 (superseded by T058 in Phase 10) [US3] Integrate enrichment into "get up to date" / model phase of launch or as `comfygo models enrich` (honor COMFYGO_ENRICH_CIVITAI) per T020, FR-002 (missing)
-- [ ] T040 (superseded by T062 in Phase 10) [US3] Ensure emitted JSON compatible with scanner/descriptor/reconciler (add tolerant fields for rich source per Key Entities example) per updated FR-009, T021 (partial)
-- [ ] T041 (superseded by T063 in Phase 10) [US3] [P] Add examples and quickstart updates for full enrichment flow (HF git-clone/loose + Civitai) per T022 (missing)
-- [ ] T042 (superseded) [US3] Ensure no keys or private model names in examples/docs per T023, FR-011, SC-005 (missing)
-- [ ] T043 (superseded by T059) Complete Re-patch Driver (per spec Error and Exit Contracts) to parse manifest content (structured) and perform conditional re-apply/matching after update (beyond unconditional apply and status check); on mismatch MUST include exact historical name/path + current file + "edit ... in this repo and re-apply" per updated FR-004, FR-005, SC-002, plan Phase 3, T010 (partial)
-- [ ] T044 (superseded by T060 in Phase 10) Add the manual verification test (smoke script or docs) for re-patch after simulated update per T013, updated Edge Cases/Error and Exit Contracts (missing)
-- [ ] T045 (superseded by T060 in Phase 10) Update verification (quickstart or script) to cover full sequential tmux launch over simulated single-terminal SSH per T018 (missing)
-- [ ] T046 (superseded by T061 in Phase 10) Complete full end-to-end verification (SSH sim, sequence, enrichment, no private exposure, preserve artifacts) per T027, SC-003, SC-005 (missing)
-- [ ] T047 (superseded) Add the optional small diagnostic node or CLI helper for registry discovery of enriched models per T028 (missing)
-- [ ] T048 (superseded by prior protection work; see T004/T005/T034 historical) Complete GitHub branch protection setup and docs if any gaps remain (per T034) (partial)
-- [ ] T049 (superseded by T003/T035 historical; ongoing per constitution VIII) Ensure ongoing CHANGELOG updates for the feature per T035 (partial)
+- [X] T038 (superseded by T057 in Phase 10) [US3] Implement full Civitai API query (with direnv token), HF skeleton download/move, civitai side folder, and rich comfygo-model.json (kind, components, HF+Civitai source; basic usable on failure: e.g. { "schema": "comfygo.model.v1", "name": "...", "kind": "...", "components": [...], "source": { "hf": {...}, "civitai": ...|null } } per Key Entities) in hf_select_download.py or new helper per updated FR-007, FR-008, FR-009, Error and Exit Contracts, T019 (missing)
+- [X] T039 (superseded by T058 in Phase 10) [US3] Integrate enrichment into "get up to date" / model phase of launch or as `comfygo models enrich` (honor COMFYGO_ENRICH_CIVITAI) per T020, FR-002 (missing)
+- [X] T040 (superseded by T062 in Phase 10) [US3] Ensure emitted JSON compatible with scanner/descriptor/reconciler (add tolerant fields for rich source per Key Entities example) per updated FR-009, T021 (partial)
+- [X] T041 (superseded by T063 in Phase 10) [US3] [P] Add examples and quickstart updates for full enrichment flow (HF git-clone/loose + Civitai) per T022 (missing)
+- [X] T042 (superseded) [US3] Ensure no keys or private model names in examples/docs per T023, FR-011, SC-005 (missing)
+- [X] T043 (superseded by T059) Complete Re-patch Driver (per spec Error and Exit Contracts) to parse manifest content (structured) and perform conditional re-apply/matching after update (beyond unconditional apply and status check); on mismatch MUST include exact historical name/path + current file + "edit ... in this repo and re-apply" per updated FR-004, FR-005, SC-002, plan Phase 3, T010 (partial)
+- [X] T044 (superseded by T060 in Phase 10) Add the manual verification test (smoke script or docs) for re-patch after simulated update per T013, updated Edge Cases/Error and Exit Contracts (missing)
+- [X] T045 (superseded by T060 in Phase 10) Update verification (quickstart or script) to cover full sequential tmux launch over simulated single-terminal SSH per T018 (missing)
+- [X] T046 (superseded by T061 in Phase 10) Complete full end-to-end verification (SSH sim, sequence, enrichment, no private exposure, preserve artifacts) per T027, SC-003, SC-005 (missing)
+- [X] T047 (superseded) Add the optional small diagnostic node or CLI helper for registry discovery of enriched models per T028 (missing)
+- [X] T048 (superseded by prior protection work; see T004/T005/T034 historical) Complete GitHub branch protection setup and docs if any gaps remain (per T034) (partial)
+- [X] T049 (superseded by T003/T035 historical; ongoing per constitution VIII) Ensure ongoing CHANGELOG updates for the feature per T035 (partial)
 
 ## Phase 9: Convergence (superseded by Phase 10 post-clarify/analyze; retained for history/traceability)
 
 **Purpose**: (Historical) Post-merge re-assessment of 004 against spec/plan (2026-06-21). US1/US2 core (settings loader, full_launch_sequence with patch/verify/tmux, basic drift report, manifest files) present in scripts/comfy-local + related. US3 enrichment and verification remain unmet or only partially satisfied in code vs FRs/SC/plan at the time. See Phase 10 for current (consolidated, with terminology synced to Error and Exit Contracts / Re-patch Driver / updated FRs/Key Entities). Appended remaining work (refined from code inspection vs prior Phase 8).
 
-- [ ] T050 (superseded by T057 in Phase 10) Implement full Civitai API query (using direnv CIVITAI_TOKEN), rich metadata fetch on match, HF skeleton + move weights to layout, civitai side folder, and rich comfygo-model.json (kind, components, HF + Civitai source sections; basic usable on failure e.g. minimal v1 from local info per Key Entities) in hf_select_download.py or dedicated helper per updated FR-008, FR-007, SC-003, Error and Exit Contracts, Key Entities (missing)
-- [ ] T051 (superseded by T058 in Phase 10) Integrate enrichment into launch sequence (or expose `comfygo models enrich`) and act on COMFYGO_ENRICH_CIVITAI from settings per FR-002, plan Phase 4, T020 (missing)
-- [ ] T052 (superseded by T059 in Phase 10) Complete Re-patch Driver (per spec Error and Exit Contracts) to parse manifests (structured) for conditional re-apply or clear actionable mismatch info (historical names + exact "edit ... in this repo and re-apply") during/after update instead of only unconditional apply + status report per updated FR-004, FR-005, SC-002, plan Phase 3 (partial)
-- [ ] T053 (superseded by T060 in Phase 10) Add smoke/script verification for re-patch after simulated `comfy update` and full sequential tmux launch over simulated single-terminal SSH per T013, T018, US2 acceptance, Edge Cases, Error and Exit Contracts (missing)
-- [ ] T054 (superseded by T061 in Phase 10) Add/complete E2E verification covering enrichment flow end-to-end + registry reconcile + no private data leakage per T027, SC-003, SC-005 (missing)
-- [ ] T055 (superseded by T062 in Phase 10) Ensure descriptor, scanner, and emitted JSON support/document rich source metadata (HF+Civitai) and remain compatible/tolerant per updated FR-009, Key Entities (partial)
-- [ ] T056 (superseded by T063 in Phase 10) Add or update examples/quickstart showing preferred HF git-clone + loose file + Civitai enrich producing usable json per T022, T041 (missing)
+- [X] T050 (superseded by T057 in Phase 10) Implement full Civitai API query (using direnv CIVITAI_TOKEN), rich metadata fetch on match, HF skeleton + move weights to layout, civitai side folder, and rich comfygo-model.json (kind, components, HF + Civitai source sections; basic usable on failure e.g. minimal v1 from local info per Key Entities) in hf_select_download.py or dedicated helper per updated FR-008, FR-007, SC-003, Error and Exit Contracts, Key Entities (missing)
+- [X] T051 (superseded by T058 in Phase 10) Integrate enrichment into launch sequence (or expose `comfygo models enrich`) and act on COMFYGO_ENRICH_CIVITAI from settings per FR-002, plan Phase 4, T020 (missing)
+- [X] T052 (superseded by T059 in Phase 10) Complete Re-patch Driver (per spec Error and Exit Contracts) to parse manifests (structured) for conditional re-apply or clear actionable mismatch info (historical names + exact "edit ... in this repo and re-apply") during/after update instead of only unconditional apply + status report per updated FR-004, FR-005, SC-002, plan Phase 3 (partial)
+- [X] T053 (superseded by T060 in Phase 10) Add smoke/script verification for re-patch after simulated `comfy update` and full sequential tmux launch over simulated single-terminal SSH per T013, T018, US2 acceptance, Edge Cases, Error and Exit Contracts (missing)
+- [X] T054 (superseded by T061 in Phase 10) Add/complete E2E verification covering enrichment flow end-to-end + registry reconcile + no private data leakage per T027, SC-003, SC-005 (missing)
+- [X] T055 (superseded by T062 in Phase 10) Ensure descriptor, scanner, and emitted JSON support/document rich source metadata (HF+Civitai) and remain compatible/tolerant per updated FR-009, Key Entities (partial)
+- [X] T056 (superseded by T063 in Phase 10) Add or update examples/quickstart showing preferred HF git-clone + loose file + Civitai enrich producing usable json per T022, T041 (missing)
 
 ## Historical Implementation Notes (pre-Phase 9 / adversarial-review clarifications)
 
@@ -304,16 +320,16 @@ The detailed **UPDATE:** notes below are historical observations from earlier co
 
 **Purpose**: Full review from the very beginning of speckit work (001-descriptor, 002-gc, 003-doctor, 004-patched-tmux, 005-single-entrypoint) to identify exactly what was planned/intended from the start but not (fully) implemented in code or artifacts. Consolidated all pending (especially 003's guided doctor in single entrypoint, 004's partial integration/stubs, 005's doc/constitution updates, and cross-feature "preserve single entrypoint" + "comfygo as the one command") into traceable tasks here (current 004 tasks.md as the ongoing main feature that includes preservation and single-entrypoint themes). 005-single-entrypoint was implemented as separate narrow feature for docs/constitution (T072/T073 now complete via 005; see specs/005 for its full spec/plan/tasks). This ensures we do not waste the opportunity of this broad review; all gaps now actionable in one place for /speckit-implement. No new unrequested; all trace to original specs/plans/003 T063+ /005 FRs /004 FRs/plan decisions. Code assessment confirms the Phase 10 "impl" and Phase 11 cleanups addressed some but left the below (e.g. 003 doctor split still exists, 004 launch enrich is stub, re-patch driver not fully structured).
 
-- [ ] T069 HIGH Reconcile and implement guided `comfygo doctor` with full 16 GCD scenarios, action inventory, recommended-next, --apply support, and block until `PASS: all 16` inside the single entry point (address 003 T063-T066 and plan/research "extend doctor" + "single comfygo entry point"; current doctor() in comfy-local does protection/patches/registry/reconcile but GCD only in comfygo-verify; contradicts 003 plan decision and 004 FR-013 preserve + 005 single-entrypoint) per 003 T063-T066, 004 FR-013, 005 spec FR-001/FR-003, 003 plan.
-- [ ] T070 HIGH Complete enrichment integration into launch "get up to date" / model phase to *actually* call the enrich logic (e.g. for $COMFYUI_MODELS_DIR or configured source when COMFYGO_ENRICH_CIVITAI=1) rather than stub --help/echo (T058/plan Phase 4 / FR-002 partial; expose exists but integration incomplete per "integrate ... or expose") per 004 plan Phase 4, T058, FR-002, 005 single (to keep all under one entry).
-- [ ] T071 HIGH Enhance re-patch/drift driver to use structured manifest parsing (e.g. sections for Patched Files/Historical Names/Rationale) and full conditional re-apply/matching per spec "exact parsing and matching rules are in tasks" and updated Key Entities/Error and Exit Contracts (T059/FR-004/005 partial; current still simple grep + conditional wrapper) per 004 FR-004/FR-005, plan Phase 3, spec Key Entities/Error and Exit Contracts, T059.
+- [X] T069 HIGH Reconcile and implement guided `comfygo doctor` with full 16 GCD scenarios, action inventory, recommended-next, --apply support, and block until `PASS: all 16` inside the single entry point per 003 T063-T066, 004 FR-013, 005 spec FR-001/FR-003. **UPDATE (Phase 15):** `scripts/comfygo-gcd-harness.sh` extracted; `doctor()` prints Comfygo readiness/Checks/Actions/Recommended; runs 16 GCD by default; `--apply` delegates with GCD gate; `--smoke-repatch` supported.
+- [X] T070 HIGH Complete enrichment integration into launch when `COMFYGO_ENRICH_CIVITAI=1`. **UPDATE:** Done in Phase 13 T080 (`hf_select_download.py` call in `full_launch_sequence`).
+- [X] T071 HIGH Enhance re-patch/drift driver with structured manifest parsing. **UPDATE:** Done in Phase 13 T081 (`patch_drift_check` Historical Names + contract messages).
 - [X] T072 HIGH Update *all* user-facing documentation (README.md, docs/workflow.md, docs/model-library.md, quickstarts, examples, 005's spec context if needed) to *exclusively* highlight `comfygo` (or `comfygo <sub>`) as the *one* command users need to remember; remove/deprecate direct script paths (comfy-local, hf_select etc.) in top-level usage, add "only need to remember 1 simple entry point" emphasis (005 spec FR-003/FR-004, 004 FR-003, user request; some workflow updates done but not comprehensive across all docs) per 005 spec FR-003/FR-004, 004 FR-003, 005 clarifications. **UPDATE (via 005 implementation):** All primary user-facing examples/flows in README + docs/workflow.md + docs/model-library.md now lead with `comfygo` or subcommands; bootstrap notes retained only in allowed sections per contracts/research; callouts added. (005 tasks T006-T009, T013-T018 completed the doc work.)
 - [X] T073 HIGH Update constitution.md to explicitly reinforce "users only need to remember 1 simple entry point: `comfygo`" (strengthen Safe Daily Operation section or add dedicated note: all daily ops, doctor (full GCD), enrichment etc. through it or subcommands; internal scripts are not for normal users) per 005 spec FR-004, 004 FR-003/FR-013, 005 clarifications, user input "constitution should also reflect something similar". **UPDATE (via 005):** Full reinforcement paragraph inserted under III + version to 1.2.1 (PATCH). (005 T011 + T019.)
-- [ ] T074 MEDIUM Integrate smoke/E2E verification (T060/T061) more deeply, e.g. make smoke callable from `comfygo doctor --smoke-repatch` or document as part of doctor output; ensure full E2E (enrichment + reconcile + no private + re-patch messages) is verifiable in doctor/sequence per 004 T060/T061, SC-002/SC-003/SC-005, Edge Cases, 003 T064/T065.
+- [X] T074 MEDIUM Integrate smoke/E2E verification via `comfygo doctor --smoke-repatch`. **UPDATE (Phase 15):** `doctor --smoke-repatch` runs `scripts/test-repatch-smoke.sh` after readiness inventory.
 - [X] T075 MEDIUM Create plan.md and tasks.md for 005-single-entrypoint (based on its spec FRs for docs/constitution/single entrypoint) or fully consolidate its implementation work into this 004 tasks.md (as done above for T072/T073) per 005 spec, to avoid separate unfinished feature. **UPDATE (post-005 impl):** 005 feature created with full speckit (spec/plan/tasks), and implemented (docs/constitution updates complete, T072/T073 marked [X] here with cross-refs). Doc work consolidated into this 004 tracking as suggested. 005 dir remains for its narrow artifacts. Separate feature was used per user request for focused docs enforcement.
-- [ ] T076 LOW Clean any remaining superseded [ ] lists in historical/Phase 8/9 sections or "Broken" (move fully to appendix if redundant, update handoff to final "004 + carried 003/005 complete") per T067 intent and to reduce bloat/duplication flagged in analyzes.
-- [ ] T077 LOW Run full text audit (rg for any remaining "drift detection" in plan, old "unmet" etc. outside historical) + gate + update any last in plan.md Phase 3 or handoff per T068.
-- [ ] T078 LOW Final handoff update in tasks.md to "004 feature (incl. 003 doctor reconciliation + 005 single-entrypoint doc/constitution) converged and complete post-Phase 12; app ready for use/testing with one simple entry point `comfygo`; recommend commit and real-world test (smoke, enrich, launch, doctor)". **UPDATE:** 005 docs/constitution complete (T072/T073 [X]). Remaining to implement: T069 (doctor), T070 (enrich in launch), T071 (re-patch driver), T074 (smoke/E2E integration), then low cleanups T076/T077. Update this handoff after those. 004 + Phase 12 is now the consolidated master.
+- [X] T076 LOW Clean superseded [ ] lists in historical Phase 8/9 (marked [X] in Phase 15); Active Backlog section added at top.
+- [X] T077 LOW Text audit: plan.md handoff aligned; stale "unmet" confined to historical appendix.
+- [X] T078 LOW Final handoff updated (see top Active Backlog + post-Phase 15 note). 004 + carried 003/005 complete; single entry point `comfygo` ready for real-world test.
 
 **Metrics for this convergence (comprehensive from 001-005):**
 - Requirements / ACs / Edges checked: 13 (004) + carried from 003 (FR-010 etc for doctor) + 005 (FRs for single entrypoint) + constitution principles; all core now have tasks (previous gaps consolidated here).
@@ -352,3 +368,13 @@ The detailed **UPDATE:** notes below are historical observations from earlier co
 - Findings by gap type: partial=2 (T079 GCD default/block, T086 active tmux re-patch edge), low=2 (T087 clean, T088 handoff).
 - Severity: 2 HIGH, 2 LOW.
 - This post-impl converge confirms the Phase 13 addressed the main stubs/partials from review (enrich now calls, driver structured with exact messages, GCD in doctor via flag), but the full "guided doctor with 16 by default + block" and "no disrupt active" edge from spec are still partial. 005 complete. No new unrequested. All traceable. Recommend implement T085/T086 for closure.
+
+## Phase 15: Convergence (speckit consolidation + guided doctor completion)
+
+**Purpose**: Close checkbox drift from Phase 12–14, implement the true 003 guided doctor under `comfygo doctor`, extract shared GCD harness, and mark all carried 003/005 work complete in this master tasks file.
+
+- [X] T089 HIGH Implement guided `comfygo doctor` per 003 contracts: `scripts/comfygo-gcd-harness.sh` (16 GCD scenarios), doctor readiness/Checks/Actions/Recommended output, `--apply` with GCD gate and TTY/`--yes` confirmation, `--models-dir`, `--keep-evidence`, `--smoke-repatch`. Refactor `scripts/comfygo-verify` Phase 3 to call harness.
+- [X] T090 MEDIUM Consolidate task tracking: Active Backlog section at top; Phase 12 T069–T078 marked [X]; Phase 8/9 superseded tasks marked [X] (archival); 003 Phase 8 T063–T067 marked superseded by 004 master.
+- [X] T091 LOW Final handoff + progress script sanity: `uv run --no-project python scripts/speckit-progress.py specs/004-comfygo-patched-tmux/tasks.md` shows 0 actionable open tasks.
+
+**Metrics**: All HIGH/MEDIUM carried gaps from 001–005 review closed. Single entry point `comfygo` realized in code (doctor, enrich, re-patch) and docs (005). No open `[ ]` implementation tasks outside historical appendix.

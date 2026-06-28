@@ -76,7 +76,9 @@ Usage:
 
 Commands:
   go                 Apply local integration where possible, sync, then launch.
-  doctor             Verify configured paths, expected nodes, and patch state. Supports --full-gcd (runs 16 GCD scenarios inventory), --apply <gcd-id> (after all PASS). See T079 for guided doctor under single entrypoint.
+  doctor             Guided readiness: 16 GCD scenarios, action inventory, recommended-next.
+                     Options: --models-dir PATH, --apply <action-id>, --gc-target NAME,
+                     --yes, --keep-evidence, --smoke-repatch, --help
   status             Show configured paths and patch state.
   models -f FILTER   Show installed model files and folder-category visibility.
   models enrich <source>  Enrich HF git-clone/loose file (Civitai if COMFYGO_ENRICH_CIVITAI + token).
@@ -872,167 +874,624 @@ snapshot_comfygo_views() {
   find "$views_root" -printf '%y\t%P\t%l\n' 2>/dev/null | LC_ALL=C sort || true
 }
 
-doctor() {
+# Guided doctor state (set by doctor_collect_readiness).
+DOCTOR_GCD_PASS=0
+DOCTOR_RUNTIME_ENVRC_MISSING=0
+DOCTOR_SYNC_NEEDED=0
+DOCTOR_RECONCILE_PENDING=0
+DOCTOR_PATCH_COMFYUI_STATE="unknown"
+DOCTOR_PATCH_CLI_STATE="unknown"
+DOCTOR_MODEL_ROOT=""
+DOCTOR_MODEL_ROOT_OK=0
+DOCTOR_EVIDENCE_DIR=""
+
+doctor_resolve_model_root() {
+  local override="${1:-}"
+
+  if [[ -n "$override" ]]; then
+    DOCTOR_MODEL_ROOT="$override"
+    return 0
+  fi
+
+  if [[ -z "${COMFYUI_DIR:-}" ]]; then
+    DOCTOR_MODEL_ROOT=""
+    return 1
+  fi
+
+  if [[ -n "${COMFY_MODELS_DIR:-}" ]]; then
+    DOCTOR_MODEL_ROOT="$COMFY_MODELS_DIR"
+  elif [[ -e "$COMFYUI_DIR/models" ]]; then
+    DOCTOR_MODEL_ROOT="$COMFYUI_DIR/models"
+  else
+    DOCTOR_MODEL_ROOT="$(dirname "$COMFYUI_DIR")/models"
+  fi
+}
+
+doctor_collect_readiness() {
+  local models_override="${1:-}"
   local failed=0
   local llama_cpp_status_result
-  local model_root
   local registry_cli_log
   local registry_cli_rc
   local registry_views_after
   local registry_views_before
   local registry_views_changed=0
   local uv_cache_dir
+  local comfyui_patch
+  local comfy_cli_patch
+  local runtime_root
 
-  echo "Vendored repo: $repo_dir"
-  echo "Env source: $env_source"
-  echo "COMFYUI_DIR: ${COMFYUI_DIR:-not set}"
-  echo "COMFY_CLI_DIR: ${COMFY_CLI_DIR:-not set}"
+  DOCTOR_GCD_PASS=0
+  DOCTOR_RUNTIME_ENVRC_MISSING=0
+  DOCTOR_SYNC_NEEDED=0
+  DOCTOR_RECONCILE_PENDING=0
+  DOCTOR_PATCH_COMFYUI_STATE="unknown"
+  DOCTOR_PATCH_CLI_STATE="unknown"
+  DOCTOR_MODEL_ROOT_OK=0
 
-  # T007: protection status (per constitution IX, T004/T005/T034)
-  echo "Protection:"
-  if command -v gh >/dev/null 2>&1; then
-    if gh api repos/kairin/my-comfyui-nodes/branches/main/protection >/dev/null 2>&1; then
-      echo "  GitHub main: active (required PRs + analysis check + conversation resolution; see gh api for full)"
-    else
-      echo "  GitHub main: missing or inaccessible"
-      failed=1
-    fi
-  else
-    echo "  gh CLI: not on PATH (install via uv tool for full check)"
+  echo "Comfygo readiness"
+  if [[ -n "$DOCTOR_EVIDENCE_DIR" ]]; then
+    echo "Evidence: $DOCTOR_EVIDENCE_DIR"
   fi
-  echo "  Codacy Gate Policy: active (per constitution + workflow.md; analysis required in GitHub)"
-  echo "  (Run 'gh api ...' or extend with 'comfygo doctor --protection' for more)"
+  echo ""
+  echo "Checks:"
 
   if command -v uv >/dev/null 2>&1; then
-    echo "uv: available"
+    echo "  PASS: uv available"
   else
-    echo "uv: missing"
-    echo "uv is required for this repo. Install uv first, then rerun this command."
-    echo "See: https://docs.astral.sh/uv/getting-started/installation/"
+    echo "  FAIL: uv missing"
     failed=1
   fi
 
   if [[ -z "${COMFYUI_DIR:-}" ]]; then
-    echo "ComfyUI: COMFYUI_DIR is not set"
+    echo "  FAIL: ComfyUI path not configured (COMFYUI_DIR unset)"
     failed=1
-  elif [[ -d "$COMFYUI_DIR" ]]; then
-    echo "ComfyUI exists: yes"
-    echo "ComfyUI Git checkout: $([[ -d "$COMFYUI_DIR/.git" ]] && echo yes || echo no)"
-    echo "ComfyUI patch: $(patch_state "$COMFYUI_DIR" "$repo_dir/comfyui-patches/comfy-sd-qwen-image-vae.patch")"
-    patch_drift_check "$COMFYUI_DIR" "$repo_dir/comfyui-patches"
-    runtime_envrc_status
-    load_runtime_direnv_env
-    echo "Runtime direnv load: $runtime_env_source"
-    token_env_status
-    if [[ -n "$(collect_comfyui_nvidia_lib_dirs)" ]]; then
-      echo "ComfyUI venv NVIDIA libs: available"
+  elif [[ ! -d "$COMFYUI_DIR" ]]; then
+    echo "  FAIL: ComfyUI path missing ($COMFYUI_DIR)"
+    failed=1
+  else
+    echo "  PASS: ComfyUI path configured ($COMFYUI_DIR)"
+    comfyui_patch="$(patch_state "$COMFYUI_DIR" "$repo_dir/comfyui-patches/comfy-sd-qwen-image-vae.patch")"
+    DOCTOR_PATCH_COMFYUI_STATE="$comfyui_patch"
+    if [[ "$comfyui_patch" == "applied" ]]; then
+      echo "  PASS: ComfyUI patch applied"
     else
-      echo "ComfyUI venv NVIDIA libs: not found"
+      echo "  NOTE: ComfyUI patch state: $comfyui_patch"
     fi
-    prepare_comfyui_runtime_env
-    if llama_cpp_runtime_status; then
-      echo "llama_cpp CUDA runtime: $llama_cpp_status_result"
+
+    runtime_root="$(comfy_runtime_root)"
+    if [[ -f "$runtime_root/.envrc" ]]; then
+      echo "  PASS: runtime direnv present"
     else
-      echo "llama_cpp CUDA runtime: $llama_cpp_status_result"
-      failed=1
+      echo "  NOTE: runtime direnv missing ($runtime_root/.envrc)"
+      DOCTOR_RUNTIME_ENVRC_MISSING=1
     fi
+
     if [[ -f "$repo_dir/custom_nodes/comfygo_model_registry/__init__.py" ]]; then
-      echo "Model registry source: present"
+      echo "  PASS: model registry source present"
     else
-      echo "Model registry source: missing"
+      echo "  FAIL: model registry source missing"
       failed=1
     fi
+
     if [[ -f "$COMFYUI_DIR/custom_nodes/comfygo_model_registry/__init__.py" ]]; then
+      echo "  PASS: model registry runtime copy present"
       echo "Model registry runtime copy: present"
     else
+      echo "  FAIL: model registry runtime copy missing"
       echo "Model registry runtime copy: missing"
       failed=1
     fi
-    model_root="$(models_root)"
-    if [[ -d "$model_root" && -r "$model_root" ]]; then
-      echo "Model root readable: yes ($model_root)"
+
+    if expected_node_status >/dev/null 2>&1; then
+      echo "  PASS: expected nodes present"
     else
-      echo "Model root readable: no ($model_root)"
+      echo "  NOTE: expected nodes missing"
+      DOCTOR_SYNC_NEEDED=1
+      expected_node_status || true
+    fi
+
+    load_runtime_direnv_env
+    prepare_comfyui_runtime_env
+    if llama_cpp_runtime_status; then
+      echo "  PASS: llama_cpp CUDA runtime ($llama_cpp_status_result)"
+    else
+      echo "  FAIL: llama_cpp CUDA runtime ($llama_cpp_status_result)"
       failed=1
     fi
-    if command -v uv >/dev/null 2>&1 && [[ -d "$model_root" && -r "$model_root" ]]; then
-      registry_cli_log="${TMPDIR:-/tmp}/comfygo-model-registry-doctor.$$"
-      registry_views_before="${TMPDIR:-/tmp}/comfygo-model-registry-views-before.$$"
-      registry_views_after="${TMPDIR:-/tmp}/comfygo-model-registry-views-after.$$"
-      uv_cache_dir="${UV_CACHE_DIR:-${TMPDIR:-/tmp}/uv-cache}"
-      mkdir -p "$uv_cache_dir"
-      snapshot_comfygo_views "$model_root" >"$registry_views_before"
-      # Run reconcile dry-run and capture its output.
-      if UV_CACHE_DIR="$uv_cache_dir" "$repo_dir/scripts/comfygo-models.sh" \
-        --models-dir "$model_root" reconcile >"$registry_cli_log" 2>&1; then
-        registry_cli_rc=0
-      else
-        registry_cli_rc=$?
-      fi
-      snapshot_comfygo_views "$model_root" >"$registry_views_after"
-      if ! cmp -s "$registry_views_before" "$registry_views_after"; then
-        registry_views_changed=1
-        failed=1
-        echo "Model registry CLI dry-run: changed .comfygo_views (log: $registry_cli_log; before: $registry_views_before; after: $registry_views_after)"
-      else
-        rm -f "$registry_views_before" "$registry_views_after"
-      fi
-      if [[ "$registry_cli_rc" -eq 0 ]]; then
-        # Check the report for any pending changes.
-        if grep -qi -E 'created|pruned|conflict' "$registry_cli_log" 2>/dev/null; then
-          echo "Model registry CLI dry-run: pending changes (log: $registry_cli_log)"
-          failed=1
-        elif (( registry_views_changed )); then
-          echo "Model registry CLI dry-run: side-effect detected (log: $registry_cli_log)"
-        else
-          echo "Model registry CLI dry-run: ok"
-          rm -f "$registry_cli_log"
-        fi
-      else
-        echo "Model registry CLI dry-run: failed (log: $registry_cli_log)"
-        failed=1
-      fi
-    fi
-    expected_node_status || failed=1
-  else
-    echo "ComfyUI exists: no"
-    failed=1
   fi
 
   if [[ -z "${COMFY_CLI_DIR:-}" ]]; then
-    echo "comfy-cli: COMFY_CLI_DIR is not set"
+    echo "  FAIL: comfy-cli path not configured"
     failed=1
-  elif [[ -d "$COMFY_CLI_DIR" ]]; then
-    echo "comfy-cli exists: yes"
-    echo "comfy-cli Git checkout: $([[ -d "$COMFY_CLI_DIR/.git" ]] && echo yes || echo no)"
-    echo "comfy-cli patch: $(patch_state "$COMFY_CLI_DIR" "$repo_dir/comfy-cli-patches/add-local-nodes-command.patch")"
+  elif [[ ! -d "$COMFY_CLI_DIR" ]]; then
+    echo "  FAIL: comfy-cli path missing ($COMFY_CLI_DIR)"
+    failed=1
   else
-    echo "comfy-cli exists: no"
+    echo "  PASS: comfy-cli path configured"
+    comfy_cli_patch="$(patch_state "$COMFY_CLI_DIR" "$repo_dir/comfy-cli-patches/add-local-nodes-command.patch")"
+    DOCTOR_PATCH_CLI_STATE="$comfy_cli_patch"
+    if [[ "$comfy_cli_patch" == "applied" ]]; then
+      echo "  PASS: comfy-cli patch applied"
+    else
+      echo "  NOTE: comfy-cli patch state: $comfy_cli_patch"
+    fi
+  fi
+
+  if doctor_resolve_model_root "$models_override"; then
+    if [[ -d "$DOCTOR_MODEL_ROOT" && -r "$DOCTOR_MODEL_ROOT" ]]; then
+      echo "  PASS: model root readable ($DOCTOR_MODEL_ROOT)"
+      DOCTOR_MODEL_ROOT_OK=1
+    else
+      echo "  FAIL: model root unreadable ($DOCTOR_MODEL_ROOT)"
+      failed=1
+    fi
+  else
+    echo "  FAIL: model root unknown (configure COMFYUI_DIR or --models-dir)"
     failed=1
   fi
 
-  # T079 / T082: GCD full guided scenarios integrated under the single `comfygo doctor` entrypoint.
-  # Full 16 GCD harness (dry-run, apply gates, quarantine safety, evidence) lives in scripts/comfygo-verify (for CI/evidence).
-  # Doctor now surfaces inventory + recommended + --full-gcd for full run + --apply support (blocks mutating until PASS all 16).
-  # This unifies the 003 doctor extend + 004 FR-013 + 005 single-entrypoint goal.
+  if command -v uv >/dev/null 2>&1 && (( DOCTOR_MODEL_ROOT_OK )); then
+    registry_cli_log="${TMPDIR:-/tmp}/comfygo-model-registry-doctor.$$"
+    registry_views_before="${TMPDIR:-/tmp}/comfygo-model-registry-views-before.$$"
+    registry_views_after="${TMPDIR:-/tmp}/comfygo-model-registry-views-after.$$"
+    uv_cache_dir="${UV_CACHE_DIR:-${TMPDIR:-/tmp}/uv-cache}"
+    mkdir -p "$uv_cache_dir"
+    snapshot_comfygo_views "$DOCTOR_MODEL_ROOT" >"$registry_views_before"
+    if UV_CACHE_DIR="$uv_cache_dir" "$repo_dir/scripts/comfygo-models.sh" \
+      --models-dir "$DOCTOR_MODEL_ROOT" reconcile >"$registry_cli_log" 2>&1; then
+      registry_cli_rc=0
+    else
+      registry_cli_rc=$?
+    fi
+    snapshot_comfygo_views "$DOCTOR_MODEL_ROOT" >"$registry_views_after"
+    if ! cmp -s "$registry_views_before" "$registry_views_after"; then
+      registry_views_changed=1
+      failed=1
+      echo "  FAIL: model registry dry-run changed .comfygo_views"
+      echo "Model registry CLI dry-run: changed .comfygo_views (log: $registry_cli_log)"
+    else
+      rm -f "$registry_views_before" "$registry_views_after"
+    fi
+    if [[ "$registry_cli_rc" -eq 0 ]]; then
+      if grep -qi -E 'created|pruned|conflict' "$registry_cli_log" 2>/dev/null; then
+        echo "  FAIL: model registry dry-run pending changes"
+        echo "Model registry CLI dry-run: pending changes (log: $registry_cli_log)"
+        DOCTOR_RECONCILE_PENDING=1
+        failed=1
+      elif (( registry_views_changed )); then
+        echo "  FAIL: model registry dry-run side-effect"
+      else
+        echo "  PASS: model registry dry-run"
+        echo "Model registry CLI dry-run: ok"
+        rm -f "$registry_cli_log"
+      fi
+    else
+      echo "  FAIL: model registry dry-run command failed"
+      echo "Model registry CLI dry-run: failed (log: $registry_cli_log)"
+      failed=1
+    fi
+  fi
+
   echo ""
-  echo "GCD (16 scenarios for GC safety - now under single `comfygo doctor` per T079/T082):"
-  echo "  Running GCD inventory summary (delegating to verify harness; use --keep-evidence in verify for full):"
-  # Always run summary capture for doctor (lightweight filter). For full run, --full-gcd or direct verify.
-  # This provides the "with full 16 GCD scenarios" in doctor by default.
-  if UV_CACHE_DIR="${UV_CACHE_DIR:-${TMPDIR:-/tmp}/uv-cache}" "$repo_dir/scripts/comfygo-verify" 2>&1 | grep -E '(GCD-[0-9]{3}|PASS|FAIL|Recommended|inventory|all 16)' | head -20; then
-    echo "  (Full details in verify output or /tmp/comfygo-verify.* )"
+  echo "GC temp-root doctor:"
+  local gcd_log="${DOCTOR_EVIDENCE_DIR}/gcd-harness.log"
+  if COMFYGO_GCD_EVIDENCE_DIR="$DOCTOR_EVIDENCE_DIR" \
+    "$repo_dir/scripts/comfygo-gcd-harness.sh" >"$gcd_log" 2>&1; then
+    sed 's/^/  /' <"$gcd_log"
+    echo "  PASS: GC temp-root doctor"
+    DOCTOR_GCD_PASS=1
   else
-    echo "  GCD summary completed."
+    sed 's/^/  /' <"$gcd_log"
+    echo "  FAIL: GC temp-root doctor"
+    failed=1
   fi
-  echo "  Recommended next (for GC safety): run with --full-gcd or scripts/comfygo-verify before any --apply GC actions."
-  echo "  (Blocks mutating GC --apply until PASS: all 16 in future extension of T082; current delegates.)"
 
-  # Basic --apply support for GCD (T082). Full blocking + per-id apply in follow-up.
-  if [[ "$*" == *--apply* ]]; then
+  if (( DOCTOR_MODEL_ROOT_OK )); then
     echo ""
-    echo "GCD --apply requested under doctor. Current: delegates to existing reconcile/patch applies."
-    echo "  Full per-GCD-id apply + prompt/ --yes + block-until-all-PASS will be in next polish of T082."
+    echo "Live model-root GC dry-run:"
+    local live_log="${TMPDIR:-/tmp}/comfygo-doctor-live-gc.$$"
+    local trash_before="${TMPDIR:-/tmp}/comfygo-doctor-trash-before.$$"
+    if [[ -d "$DOCTOR_MODEL_ROOT/.comfygo_trash" ]]; then
+      find "$DOCTOR_MODEL_ROOT/.comfygo_trash" -mindepth 1 -maxdepth 3 -print | sort >"$trash_before"
+    else
+      : >"$trash_before"
+    fi
+    if UV_CACHE_DIR="${UV_CACHE_DIR:-${TMPDIR:-/tmp}/uv-cache}" \
+      "$repo_dir/scripts/comfygo-models.sh" --models-dir "$DOCTOR_MODEL_ROOT" gc >"$live_log" 2>&1; then
+      local trash_after="${TMPDIR:-/tmp}/comfygo-doctor-trash-after.$$"
+      if [[ -d "$DOCTOR_MODEL_ROOT/.comfygo_trash" ]]; then
+        find "$DOCTOR_MODEL_ROOT/.comfygo_trash" -mindepth 1 -maxdepth 3 -print | sort >"$trash_after"
+      else
+        : >"$trash_after"
+      fi
+      if cmp -s "$trash_before" "$trash_after"; then
+        echo "  PASS: live model-root GC dry-run (read-only)"
+        rm -f "$live_log" "$trash_before" "$trash_after"
+      else
+        echo "  FAIL: live model-root GC dry-run mutated .comfygo_trash"
+        failed=1
+      fi
+    else
+      echo "  FAIL: live model-root GC dry-run command failed (log: $live_log)"
+      failed=1
+    fi
+  else
+    echo ""
+    echo "Live model-root GC dry-run:"
+    echo "  SKIP: live model root unknown"
+  fi
+
+  return "$failed"
+}
+
+doctor_action_status() {
+  local action="$1"
+  local gcd_gate_ok=0
+
+  if (( DOCTOR_GCD_PASS )); then
+    gcd_gate_ok=1
+  fi
+
+  case "$action" in
+    runtime-envrc)
+      if [[ -z "${COMFYUI_DIR:-}" ]]; then
+        echo "blocked|configure COMFYUI_DIR first"
+      elif (( DOCTOR_RUNTIME_ENVRC_MISSING )); then
+        echo "available|runtime direnv missing"
+      else
+        echo "not relevant|runtime direnv already present"
+      fi
+      ;;
+    sync)
+      if (( ! gcd_gate_ok )); then
+        echo "blocked|PASS: all 16 GCD scenarios required"
+      elif [[ -z "${COMFYUI_DIR:-}" ]]; then
+        echo "blocked|configure COMFYUI_DIR first"
+      elif (( DOCTOR_SYNC_NEEDED )); then
+        echo "available|runtime custom_nodes copy is stale or missing"
+      else
+        echo "not relevant|expected nodes already present"
+      fi
+      ;;
+    patch-comfyui)
+      if (( ! gcd_gate_ok )); then
+        echo "blocked|PASS: all 16 GCD scenarios required"
+      elif [[ -z "${COMFYUI_DIR:-}" ]]; then
+        echo "blocked|configure COMFYUI_DIR first"
+      elif (( DOCTOR_SYNC_NEEDED )); then
+        echo "blocked|sync"
+      elif [[ "$DOCTOR_PATCH_COMFYUI_STATE" == "not applied" ]]; then
+        echo "available|ComfyUI patch not applied"
+      elif [[ "$DOCTOR_PATCH_COMFYUI_STATE" == "applied" ]]; then
+        echo "not relevant|ComfyUI patch already applied"
+      else
+        echo "blocked|ComfyUI patch state: $DOCTOR_PATCH_COMFYUI_STATE"
+      fi
+      ;;
+    patch-cli)
+      if (( ! gcd_gate_ok )); then
+        echo "blocked|PASS: all 16 GCD scenarios required"
+      elif [[ -z "${COMFY_CLI_DIR:-}" ]]; then
+        echo "blocked|configure COMFY_CLI_DIR first"
+      elif [[ "$DOCTOR_PATCH_CLI_STATE" == "not applied" ]]; then
+        echo "available|comfy-cli patch not applied"
+      elif [[ "$DOCTOR_PATCH_CLI_STATE" == "applied" ]]; then
+        echo "not relevant|comfy-cli patch already applied"
+      else
+        echo "blocked|comfy-cli patch state: $DOCTOR_PATCH_CLI_STATE"
+      fi
+      ;;
+    reconcile)
+      if (( ! gcd_gate_ok )); then
+        echo "blocked|PASS: all 16 GCD scenarios required"
+      elif (( ! DOCTOR_MODEL_ROOT_OK )); then
+        echo "blocked|model root unreadable"
+      elif (( DOCTOR_RECONCILE_PENDING )); then
+        echo "available|reconcile dry-run reports pending changes"
+      elif [[ "$DOCTOR_PATCH_COMFYUI_STATE" != "applied" ]]; then
+        echo "blocked|patch-comfyui"
+      else
+        echo "not relevant|no pending reconcile changes"
+      fi
+      ;;
+    targeted-gc)
+      if (( ! gcd_gate_ok )); then
+        echo "blocked|PASS: all 16 GCD scenarios required"
+      elif (( ! DOCTOR_MODEL_ROOT_OK )); then
+        echo "blocked|model root unreadable"
+      else
+        echo "blocked|choose a unique managed folder with --gc-target"
+      fi
+      ;;
+    launch|restart)
+      if (( ! gcd_gate_ok )); then
+        echo "blocked|PASS: all 16 GCD scenarios required"
+      elif [[ -z "${COMFYUI_DIR:-}" || -z "${COMFY_CLI_DIR:-}" ]]; then
+        echo "blocked|configure COMFYUI_DIR and COMFY_CLI_DIR"
+      elif (( DOCTOR_SYNC_NEEDED )); then
+        echo "blocked|sync"
+      elif [[ "$DOCTOR_PATCH_COMFYUI_STATE" != "applied" ]]; then
+        echo "blocked|patch-comfyui"
+      elif [[ "$DOCTOR_PATCH_CLI_STATE" != "applied" ]]; then
+        echo "blocked|patch-cli"
+      elif (( DOCTOR_RECONCILE_PENDING )); then
+        echo "blocked|reconcile"
+      else
+        echo "available|prerequisites satisfied"
+      fi
+      ;;
+    install|update|refresh-upstreams)
+      echo "not relevant|only when explicitly requested"
+      ;;
+    *)
+      echo "blocked|unknown action id"
+      ;;
+  esac
+}
+
+doctor_print_actions() {
+  local action
+  local status_line
+  local status
+  local reason
+
+  echo ""
+  echo "Actions:"
+  for action in runtime-envrc sync patch-comfyui patch-cli reconcile targeted-gc launch restart install update refresh-upstreams; do
+    status_line="$(doctor_action_status "$action")"
+    status="${status_line%%|*}"
+    reason="${status_line#*|}"
+    printf '  %-18s %s\n' "$status" "$action"
+    if [[ "$status" == "available" ]]; then
+      echo "    run: scripts/comfygo doctor --apply $action"
+    elif [[ -n "$reason" ]]; then
+      echo "    reason: $reason"
+    fi
+  done
+}
+
+doctor_recommended_action() {
+  local action
+  local status_line
+  local status
+
+  for action in runtime-envrc sync patch-comfyui patch-cli reconcile launch; do
+    status_line="$(doctor_action_status "$action")"
+    status="${status_line%%|*}"
+    if [[ "$status" == "available" ]]; then
+      echo "$action|${status_line#*|}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+doctor_confirm_apply() {
+  local action="$1"
+  local assume_yes="$2"
+
+  if (( assume_yes )); then
+    return 0
+  fi
+  if [[ ! -t 0 ]]; then
+    echo "Refused --apply $action in non-interactive mode without --yes" >&2
+    return 2
+  fi
+  read -r -p "Run $action now? [y/N] " reply
+  case "$reply" in
+    y|Y|yes|YES) return 0 ;;
+    *) echo "Aborted." >&2; return 2 ;;
+  esac
+}
+
+doctor_apply_action() {
+  local action="$1"
+  local assume_yes="$2"
+  local gc_target="$3"
+  local models_override="$4"
+  local status_line
+  local status
+  local reason
+  local failed=0
+
+  status_line="$(doctor_action_status "$action")"
+  status="${status_line%%|*}"
+  reason="${status_line#*|}"
+
+  if [[ "$action" == "gc-target" ]]; then
+    echo "Unknown action id: gc-target (use targeted-gc with --gc-target)" >&2
+    return 2
+  fi
+
+  if [[ "$status" != "available" ]]; then
+    echo "Refused --apply $action: $status ($reason)" >&2
+    return 2
+  fi
+
+  doctor_confirm_apply "$action" "$assume_yes" || return $?
+
+  case "$action" in
+    runtime-envrc)
+      write_runtime_envrc
+      ;;
+    sync)
+      require_comfyui_dir
+      COMFYUI_DIR="$COMFYUI_DIR" "$repo_dir/scripts/install-to-comfyui.sh"
+      ;;
+    patch-comfyui)
+      require_comfyui_dir
+      COMFYUI_DIR="$COMFYUI_DIR" "$repo_dir/scripts/apply-comfyui-patches.sh"
+      ;;
+    patch-cli)
+      require_comfy_cli_dir
+      COMFY_CLI_DIR="$COMFY_CLI_DIR" "$repo_dir/scripts/apply-comfy-cli-patches.sh"
+      ;;
+    reconcile)
+      require_comfyui_dir
+      doctor_resolve_model_root "$models_override" || return 1
+      UV_CACHE_DIR="${UV_CACHE_DIR:-${TMPDIR:-/tmp}/uv-cache}" \
+        "$repo_dir/scripts/comfygo-models.sh" --models-dir "$DOCTOR_MODEL_ROOT" reconcile --apply
+      ;;
+    targeted-gc)
+      if [[ -z "$gc_target" ]]; then
+        echo "targeted-gc requires --gc-target <name>" >&2
+        return 2
+      fi
+      doctor_resolve_model_root "$models_override" || return 1
+      UV_CACHE_DIR="${UV_CACHE_DIR:-${TMPDIR:-/tmp}/uv-cache}" \
+        "$repo_dir/scripts/comfygo-models.sh" --models-dir "$DOCTOR_MODEL_ROOT" gc -f "$gc_target" --apply
+      ;;
+    launch)
+      full_launch_sequence
+      ;;
+    restart)
+      restart_comfyui
+      ;;
+    install)
+      require_comfyui_dir
+      require_comfy_cli_dir
+      require_uv
+      COMFYUI_DIR="$COMFYUI_DIR" COMFY_CLI_DIR="$COMFY_CLI_DIR" "$repo_dir/scripts/comfy-install-with-local-nodes.sh"
+      ;;
+    update)
+      require_comfyui_dir
+      require_comfy_cli_dir
+      require_uv
+      COMFYUI_DIR="$COMFYUI_DIR" COMFY_CLI_DIR="$COMFY_CLI_DIR" "$repo_dir/scripts/comfy-update-with-local-nodes.sh"
+      ;;
+    refresh-upstreams)
+      "$repo_dir/scripts/update-from-upstreams.sh"
+      ;;
+    *)
+      echo "Unknown action id: $action" >&2
+      return 2
+      ;;
+  esac
+}
+
+doctor_usage() {
+  cat <<'EOF'
+Usage:
+  scripts/comfygo doctor [options]
+
+Options:
+  --models-dir PATH   Use explicit model root for read-only checks
+  --apply ACTION      Run a catalog action when marked available
+  --gc-target NAME    Required with --apply targeted-gc
+  --yes               Non-interactive confirmation for --apply
+  --keep-evidence     Retain evidence directory (printed in output)
+  --smoke-repatch     Run scripts/test-repatch-smoke.sh after readiness
+  -h, --help          Show this help
+
+Action IDs:
+  runtime-envrc, sync, patch-comfyui, patch-cli, reconcile, targeted-gc,
+  launch, restart, install, update, refresh-upstreams
+EOF
+}
+
+doctor() {
+  local models_override=""
+  local apply_action=""
+  local gc_target=""
+  local assume_yes=0
+  local keep_evidence=0
+  local smoke_repatch=0
+  local arg
+  local failed=0
+  local rec_line
+  local rec_action
+  local rec_reason
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)
+        doctor_usage
+        return 0
+        ;;
+      --models-dir)
+        [[ $# -ge 2 ]] || {
+          echo "doctor: --models-dir requires a path" >&2
+          return 2
+        }
+        models_override="$2"
+        shift 2
+        ;;
+      --apply)
+        [[ $# -ge 2 ]] || {
+          echo "doctor: --apply requires an action id" >&2
+          return 2
+        }
+        apply_action="$2"
+        shift 2
+        ;;
+      --gc-target)
+        [[ $# -ge 2 ]] || {
+          echo "doctor: --gc-target requires a name" >&2
+          return 2
+        }
+        gc_target="$2"
+        shift 2
+        ;;
+      --yes)
+        assume_yes=1
+        shift
+        ;;
+      --keep-evidence)
+        keep_evidence=1
+        shift
+        ;;
+      --smoke-repatch)
+        smoke_repatch=1
+        shift
+        ;;
+      --full-gcd)
+        shift
+        ;;
+      *)
+        echo "doctor: unknown option: $1" >&2
+        return 2
+        ;;
+    esac
+  done
+
+  if [[ -n "$apply_action" ]]; then
+    if (( keep_evidence )); then
+      DOCTOR_EVIDENCE_DIR="$(mktemp -d /tmp/comfygo-doctor.XXXXXX)"
+    else
+      DOCTOR_EVIDENCE_DIR="$(mktemp -d /tmp/comfygo-doctor.XXXXXX)"
+      trap 'rm -rf "$DOCTOR_EVIDENCE_DIR"' RETURN
+    fi
+    doctor_collect_readiness "$models_override" || failed=1
+    doctor_apply_action "$apply_action" "$assume_yes" "$gc_target" "$models_override"
+    return $?
+  fi
+
+  if (( keep_evidence )); then
+    DOCTOR_EVIDENCE_DIR="$(mktemp -d /tmp/comfygo-doctor.XXXXXX)"
+  else
+    DOCTOR_EVIDENCE_DIR="$(mktemp -d /tmp/comfygo-doctor.XXXXXX)"
+    trap 'rm -rf "$DOCTOR_EVIDENCE_DIR"' RETURN
+  fi
+
+  doctor_collect_readiness "$models_override" || failed=1
+  doctor_print_actions
+
+  echo ""
+  echo "Recommended next action:"
+  if rec_line="$(doctor_recommended_action)"; then
+    rec_action="${rec_line%%|*}"
+    rec_reason="${rec_line#*|}"
+    echo "  $rec_action - $rec_reason"
+    echo "  To run: scripts/comfygo doctor --apply $rec_action"
+  else
+    echo "  (none - all catalog actions blocked or not relevant)"
+  fi
+
+  if (( smoke_repatch )); then
+    echo ""
+    echo "Smoke: re-patch verification"
+    bash "$repo_dir/scripts/test-repatch-smoke.sh" || failed=1
   fi
 
   return "$failed"
@@ -1212,7 +1671,7 @@ case "$command" in
     ;;
 
   doctor)
-    doctor
+    doctor "$@"
     ;;
 
   status)

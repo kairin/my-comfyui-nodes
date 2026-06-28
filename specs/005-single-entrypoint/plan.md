@@ -6,7 +6,7 @@
 
 ## Summary
 
-Ensure a single memorable entry point (`comfygo`, with subcommands) is the only thing users need to remember for daily ComfyUI operations (launch, patching, enrichment via Civitai/HF, doctor/diagnostics, sync, etc.). 
+Ensure a single memorable entry point (`comfygo`, with subcommands) is the only thing users need to remember for daily ComfyUI operations (launch, patching, enrichment via Civitai/HF, doctor/diagnostics, sync, etc.).
 
 Primary requirement (from spec): All user-facing documentation (README, docs/workflow.md, docs/model-library.md, quickstarts, examples) and the project constitution MUST consistently highlight `comfygo` (or `comfygo <sub>`) as the canonical command. Internal implementation scripts remain for power users and bootstrap but are de-emphasized and never presented as the primary interface in normal flows (FR-001..FR-005, US1/US2, SC-001..SC-004).
 
@@ -27,7 +27,7 @@ See generated [research.md](research.md) for detailed decisions, alternatives, a
 
 **Storage**: Filesystem only (no DB). Docs are plain markdown + the constitution YAML-like header comments. Local state (COMFYUI_DIR etc.) lives in ignored .env* files only.
 
-**Testing**: 
+**Testing**:
 - Manual + grep validation of docs (see quickstart.md scenarios).
 - Existing pytest on the registry (unchanged).
 - ShellCheck / bash -n on any touched scripts (none expected).
@@ -119,7 +119,7 @@ No entries — Constitution Check passed with no violations (see above). This pl
 
 **Phase 0 (research)**: Complete. See [research.md](research.md). All potential NEEDS CLARIFICATION areas (scope of "documentation", treatment of hf-select-download vs. models enrich, bootstrap vs. daily examples, constitution reinforcement location and version impact) were researched via file inspection + grep inventory of bypass sites. Decisions and alternatives documented. No unresolved items.
 
-**Phase 1 (design & contracts)**: 
+**Phase 1 (design & contracts)**:
 - [research.md](research.md) generated.
 - [data-model.md](data-model.md) generated (entities: SingleEntryPointCommand, DocumentationSurface, InternalWrapper + validation rules derived from FRs/clarifications).
 - [contracts/README.md](contracts/README.md) generated (Documentation UX Contract + Constitution Alignment Contract + verification notes).
@@ -130,7 +130,7 @@ No entries — Constitution Check passed with no violations (see above). This pl
 **Post-design Constitution Check re-evaluation**: Still PASS. The design artifacts only codify the existing facade and the docs/constitution alignment requirements already stated in the feature spec. No new commands, no secret leakage, uv forms unchanged, verifiable via the new quickstart greps + simulation. Changelog (VIII) and gates (IX) explicitly called out as implementation obligations.
 
 ## Implementation Notes (high level)
-- Primary work items (to be expanded by /speckit-tasks): 
+- Primary work items (to be expanded by /speckit-tasks):
   - Edit README.md: command map, sync/refresh sections, wrappers section, lower-level script notes → all lead with comfygo; add "single entry point" callout.
   - Edit docs/workflow.md: daily use (already good), enrichment examples (change hf-select), upstream/patch sections (add comfygo forms + deprecate notes), issue template refs if needed.
   - Edit docs/model-library.md: all `scripts/hf-select-download` examples + prose → `comfygo models enrich` equivalents.

@@ -40,23 +40,7 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **Vendored source of truth**: Plan edits persistent custom-node or patch
-  behavior in this repo first, then syncs into the live ComfyUI runtime.
-- **Explicit upstream refresh**: Plan does not combine normal launch/sync with
-  automatic upstream pulls.
-- **uv-first execution**: Python and comfy-cli commands use `uv run`,
-  `uv pip --python <workspace-python>`, or
-  `uv run --python <workspace-python> --no-project python ...`. No direct
-  `pip`, `python -m pip`, or unwrapped `python` workflow commands are added.
-- **Public repo safety**: Plan keeps tokens, local paths with secrets, model
-  weights, logs, caches, and runtime histories out of Git.
-- **Verifiable runtime behavior**: Plan includes `comfygo doctor`, dry-run, or
-  equivalent verification for changes that affect launch, sync, patches, or
-  runtime library paths.
-- **Changelog (VIII)**: User-facing or significant changes are documented in root
-  CHANGELOG.md.
-- **Branch protection & safety nets (IX)**: Repo/CI related plans respect or
-  improve main branch protection and Codacy quality/security gates.
+[Gates determined based on constitution file]
 
 ## Project Structure
 

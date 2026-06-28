@@ -50,20 +50,7 @@ repos:
         files: ^custom_nodes/comfygo_model_registry/.*\.py$
         additional_dependencies: ["bandit[toml]"]
 
-  # General Python tests (fast subset for the main registry)
-  # Full tests can be run manually with uv run pytest
-  - repo: https://github.com/pre-commit/mirrors-pytest
-    rev: v8.2.1
-    hooks:
-      - id: pytest
-        name: pytest (registry tests)
-        args:
-          - "--tb=no"
-          - "-q"
-          - "custom_nodes/comfygo_model_registry/tests"
-        additional_dependencies: [pytest]
-        files: ^custom_nodes/comfygo_model_registry/.*\.py$
-        pass_filenames: false
+  # Registry tests run via the local verify-quality hook below (mirrors-pytest repo was removed upstream).
 
   # Local script to run full local verification mimicking Codacy + more
   - repo: local

@@ -58,7 +58,7 @@ run_dir="$(mktemp -d /tmp/comfygo-live.XXXXXX)"
 failed=0
 record_fail() { ... }
 
-# 3. Phases (each is a block that runs a command, checks output, 
+# 3. Phases (each is a block that runs a command, checks output,
 #    logs to evidence dir, calls record_fail on mismatch)
 
 # 4. Final result

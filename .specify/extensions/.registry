@@ -16,6 +16,9 @@
         ],
         "zed": [
           "speckit.agent-context.update"
+        ],
+        "hermes": [
+          "speckit.agent-context.update"
         ]
       },
       "registered_skills": [],
