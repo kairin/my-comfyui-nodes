@@ -277,6 +277,48 @@ def _missing_node_entries(
     return missing_nodes
 
 
+def _installed_models_for_folder(
+    client: ComfyHttpClient,
+    folder: str,
+    model_cache: dict[str, set[str] | None],
+) -> set[str] | None:
+    if folder not in model_cache:
+        model_cache[folder] = fetch_models_for_folder(client, folder)
+    return model_cache[folder]
+
+
+def _missing_models_for_node(
+    client: ComfyHttpClient,
+    node_id: str,
+    node: dict[str, Any],
+    model_cache: dict[str, set[str] | None],
+) -> list[dict[str, Any]]:
+    class_type = node.get("class_type")
+    loader_params = MODEL_LOADERS.get(class_type or "")
+    if not loader_params:
+        return []
+    inputs = node.get("inputs") or {}
+    missing_models: list[dict[str, Any]] = []
+    for param, folder in loader_params:
+        value = inputs.get(param)
+        if not isinstance(value, str) or not value.strip():
+            continue
+        installed = _installed_models_for_folder(client, folder, model_cache)
+        if installed is None or _model_present(value, installed):
+            continue
+        missing_models.append(
+            {
+                "node_id": node_id,
+                "class_type": class_type,
+                "parameter": param,
+                "folder": folder,
+                "wanted": value,
+                "sample_installed": sorted(installed)[:5],
+            }
+        )
+    return missing_models
+
+
 def _missing_model_entries(
     client: ComfyHttpClient,
     workflow: dict[str, Any],
@@ -286,30 +328,9 @@ def _missing_model_entries(
     for node_id, node in workflow.items():
         if not isinstance(node, dict):
             continue
-        class_type = node.get("class_type")
-        loader_params = MODEL_LOADERS.get(class_type or "")
-        if not loader_params:
-            continue
-        inputs = node.get("inputs") or {}
-        for param, folder in loader_params:
-            value = inputs.get(param)
-            if not isinstance(value, str) or not value.strip():
-                continue
-            if folder not in model_cache:
-                model_cache[folder] = fetch_models_for_folder(client, folder)
-            installed = model_cache[folder]
-            if installed is None or _model_present(value, installed):
-                continue
-            missing_models.append(
-                {
-                    "node_id": node_id,
-                    "class_type": class_type,
-                    "parameter": param,
-                    "folder": folder,
-                    "wanted": value,
-                    "sample_installed": sorted(installed)[:5],
-                }
-            )
+        missing_models.extend(
+            _missing_models_for_node(client, node_id, node, model_cache)
+        )
     return missing_models
 
 
