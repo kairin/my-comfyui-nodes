@@ -39,7 +39,7 @@ fi
 echo "→ ShellCheck..."
 if command -v shellcheck &> /dev/null; then
   if ! shellcheck -x scripts/*.sh 2>/dev/null || true; then
-    # shellcheck may not be installed globally; try via uv or note
+    # Note: shellcheck may not be installed globally; try via uv or note
     echo "  (shellcheck not in PATH or some scripts have issues - install shellcheck or run via Docker if needed)"
   fi
 else
@@ -73,10 +73,15 @@ else
   echo "  (codacy CLI not in PATH - install if you want local Codacy simulation)"
 fi
 
-# 6. Other quick checks (YAML, JSON in excludes, large files, etc.)
+# 6. Other quick checks (YAML, JSON, large files, etc.)
+# When this script is invoked as the verify-quality pre-commit hook, hygiene hooks
+# (trailing-whitespace, check-yaml, …) have already run — do not call pre-commit
+# again or we recurse: verify-quality → pre-commit --all-files → verify-quality → …
 echo "→ Basic repo hygiene..."
-if ! uvx pre-commit run --all-files --config .pre-commit-config.yaml 2>/dev/null | tail -5; then
-  echo "  (pre-commit config issues - run 'pre-commit run --all-files' manually)"
+if [[ -n "${VERIFY_QUALITY_INVOKED_BY_PRE_COMMIT:-}" ]]; then
+  echo "  skipped (pre-commit hygiene hooks already ran for this commit)"
+elif ! SKIP=verify-quality uvx pre-commit run --all-files --config .pre-commit-config.yaml 2>/dev/null | tail -5; then
+  echo "  (pre-commit config issues - run 'SKIP=verify-quality pre-commit run --all-files' manually)"
 fi
 
 if [ $FAILED -eq 0 ]; then

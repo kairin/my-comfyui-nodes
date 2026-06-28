@@ -57,8 +57,8 @@ repos:
     hooks:
       - id: verify-quality
         name: Full local quality verification (Codacy-equivalent)
-        entry: scripts/verify-quality.sh
-        language: script
+        entry: bash -c 'export VERIFY_QUALITY_INVOKED_BY_PRE_COMMIT=1; exec scripts/verify-quality.sh'
+        language: system
         pass_filenames: false
         always_run: true
         stages: [pre-commit, pre-push]
