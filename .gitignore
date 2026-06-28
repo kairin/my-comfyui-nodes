@@ -53,3 +53,6 @@ debug_*.json
 
 # GC quarantine area (runtime only — never commit model data).
 .comfygo_trash/
+
+# Workflow diagnose checkpoints (future; runtime only).
+.comfygo_debug/
