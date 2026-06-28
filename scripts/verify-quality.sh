@@ -48,7 +48,7 @@ fi
 
 # 3. Python security (Bandit - matches Codacy)
 echo "→ Bandit security scan (on registry code)..."
-if ! uvx bandit -r custom_nodes/comfygo_model_registry -q --skip B101,B404,B603,B108; then
+if ! uvx bandit -r custom_nodes/comfygo_model_registry -q -c bandit.yaml; then
   echo "❌ Bandit found security issues."
   FAILED=1
 fi

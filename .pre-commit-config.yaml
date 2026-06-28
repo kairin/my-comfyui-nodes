@@ -46,7 +46,7 @@ repos:
     rev: 1.7.9
     hooks:
       - id: bandit
-        args: ["-q", "--skip", "B101,B404,B603,B108", "-r"]
+        args: ["-q", "-c", "bandit.yaml", "-r"]
         files: ^custom_nodes/comfygo_model_registry/.*\.py$
 
   # Registry tests run via the local verify-quality hook below (mirrors-pytest repo was removed upstream).

@@ -80,7 +80,9 @@ def test_remove_node_clears_connections() -> None:
 
 def test_checkpoint_round_trip(tmp_path: pathlib.Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
-    cid = wa.save_checkpoint(SAMPLE, source_path="/tmp/wf.json", label="pre_apply")
+    source = tmp_path / "wf.json"
+    source.write_text("{}", encoding="utf-8")
+    cid = wa.save_checkpoint(SAMPLE, source_path=str(source), label="pre_apply")
     listed = wa.list_checkpoints()
     assert any(item["id"] == cid for item in listed)
     out = tmp_path / "restored.json"
