@@ -52,6 +52,47 @@
    (Direct `scripts/hf-select-download` remains for bootstrap/non-direnv; prefer `comfygo models enrich` for normal use per single entry point.)
 
 4. If a shell under the ComfyUI runtime root needs Hugging Face or other local
+   tokens, generate a machine-local runtime env file:
+
+   ```bash
+   comfygo runtime-envrc
+   ```
+
+## Workflow Debug (for agents)
+
+Diagnose and patch ComfyUI **API-format** workflow JSON outside the browser.
+Agents read structured JSON from stdout; the user **Loads** the fixed file in
+ComfyUI (no canvas auto-push in v1).
+
+```bash
+# After a failed queue (preferred — uses ComfyUI history)
+comfygo workflow diagnose --latest-error
+comfygo workflow diagnose --prompt-id <uuid>
+
+# Pre-queue / validation errors (workflow JSON on disk)
+comfygo workflow diagnose --workflow /path/to/workflow_api.json
+```
+
+Parse stdout: `validation`, `dependencies`, `execution`, `remediation`.
+
+Apply JSON patches (auto-checkpoint under `.comfygo_debug/checkpoints/`):
+
+```bash
+comfygo workflow apply --workflow broken.json --patch fixes.json --output fixed.json --validate
+comfygo workflow diagnose --workflow fixed.json
+```
+
+Patch ops: `set_input`, `connect`, `add_node`, `remove_node`.
+
+Rollback:
+
+```bash
+comfygo workflow checkpoint list
+comfygo workflow checkpoint restore --id <checkpoint_id> --output restored.json
+```
+
+See `AGENTS.md` (Workflow Debug Protocol) and `specs/006-workflow-diagnose/`,
+`specs/007-workflow-apply/`.
 
 ## Local Quality Gates (Mandatory Before Commit/Push)
 

@@ -61,7 +61,7 @@ upstream creator repos
 
 ## Sync To ComfyUI
 
-**Remember one command: `comfygo`** (with subcommands for `doctor`, `models enrich`, `sync`, `refresh-upstreams`, `patch-*`, etc.). All normal daily operations (launch with settings/patches/verify/tmux, enrichment, diagnostics, etc.) are available under this single memorable entry point. Direct script paths are implementation details for bootstrap, contributors, or debugging only.
+**Remember one command: `comfygo`** (with subcommands for `doctor`, `models enrich`, `workflow diagnose|apply`, `sync`, `refresh-upstreams`, `patch-*`, etc.). All normal daily operations (launch with settings/patches/verify/tmux, enrichment, diagnostics, agent workflow debug, etc.) are available under this single memorable entry point. Direct script paths are implementation details for bootstrap, contributors, or debugging only.
 
 For normal use, use the one-word launcher:
 
@@ -84,6 +84,8 @@ comfygo restart
 comfygo update
 comfygo refresh-upstreams
 comfygo runtime-envrc
+comfygo workflow diagnose --latest-error
+comfygo workflow apply --workflow broken.json --patch fixes.json --output fixed.json --validate
 ```
 
 Command map:
@@ -99,6 +101,9 @@ comfygo restart          restart a comfy-cli background ComfyUI, then launch
 comfygo update           update ComfyUI through comfy-cli, then resync this repo
 comfygo refresh-upstreams refresh vendored node sources from UPSTREAMS.tsv for review
 comfygo runtime-envrc    write a machine-local direnv file for the ComfyUI runtime root
+comfygo workflow diagnose diagnose API workflow JSON (file, prompt-id, or --latest-error)
+comfygo workflow apply   apply JSON patches; optional --validate against live ComfyUI
+comfygo workflow checkpoint list|restore  checkpoint/rollback under .comfygo_debug/
 ```
 
 `comfygo` does not automatically pull upstream custom-node changes on every

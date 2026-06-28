@@ -1,9 +1,9 @@
 # Current Issues & Core Work Areas - my-comfyui-nodes GC Doctor
 
-**Date**: 2026-06-21
+**Date**: 2026-06-28
 
 **Scope**: Current unresolved issues for the `my-comfyui-nodes` model registry,
-model GC, and `003-gc-doctor` guided operations work.
+model GC, `003-gc-doctor` guided operations, and post-merge hygiene.
 
 **Rule for this file**: Only current issues that still require resolution should
 be listed here. Resolved review comments, historical debate, and stale external
@@ -11,10 +11,13 @@ analysis claims belong in their original feature artifacts, not in this backlog.
 
 ## Current Verification Snapshot
 
-These facts were verified against the current checkout on 2026-06-21:
+These facts were verified against the current checkout on 2026-06-28:
 
-- Active Spec Kit feature:
-  `specs/003-gc-doctor`
+- Shipped (merged PR #106): `specs/006-workflow-diagnose`,
+  `specs/007-workflow-apply` — `comfygo workflow diagnose|apply|checkpoint`
+- Active Spec Kit feature (documentation pointer):
+  `specs/007-workflow-apply`
+- Prior feature (complete): `specs/003-gc-doctor`
 - `specs/003-gc-doctor/spec.md`: `20` functional requirements and `13`
   success criteria.
 - `specs/003-gc-doctor/tasks.md`: `62/62` tasks checked, `0` unchecked.
@@ -35,7 +38,7 @@ These facts were verified against the current checkout on 2026-06-21:
   UV_CACHE_DIR=/tmp/uv-cache PYTHONDONTWRITEBYTECODE=1 uv run pytest custom_nodes/comfygo_model_registry/tests -q --tb=line -p no:cacheprovider
   ```
 
-  Result: `113 passed in 1.05s`.
+  Result: `131 passed` (includes workflow diagnose/apply tests from PR #106).
 
 ## Closed Or Non-Blocking Items
 
@@ -48,6 +51,7 @@ These previously tracked items are no longer active issues in this backlog:
 | CUR-003 | Fixed | Wrapper evidence now uses `ManagedDownloader` and includes the before/after `--models-dir` ordering test. |
 | CUR-005 | Confirmed non-blocking | The older `001` checklist item is an accepted historical implementation-detail exception and does not block `003-gc-doctor`. |
 | CUR-008 | Fixed | `scripts/comfygo-verify` is documented in quickstart and contracts. |
+| CUR-009 | Shipped | `006-workflow-diagnose` + `007-workflow-apply` merged in PR #106; see `AGENTS.md` and `docs/workflow.md`. |
 
 Do not reopen these items from a stale Hermes or handoff report. Reopen only if
 a fresh local probe contradicts the status above.
@@ -57,7 +61,7 @@ a fresh local probe contradicts the status above.
 | ID | Severity | Area | Current Issue | Blocking? |
 |----|----------|------|---------------|-----------|
 | CUR-004 | Low | `002-model-gc` task artifact | T080 is checked but still says `(partial)` | No for `003-gc-doctor`, yes for `002-model-gc` cleanup |
-| CUR-006 | Medium | Verification | Dirty worktree prevents a clean `scripts/comfygo-verify` pass | Yes before final signoff |
+| CUR-006 | Medium | Verification | Dirty worktree (~140 vendored/patch files) prevents clean `scripts/comfygo-verify` | Yes before final signoff |
 | CUR-007 | Medium | Live validation | Live runtime read-only validation still needs a clean-tree run | Yes before operational confidence |
 
 ## Agent Operating Protocol
