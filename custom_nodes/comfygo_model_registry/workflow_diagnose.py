@@ -287,6 +287,29 @@ def _installed_models_for_folder(
     return model_cache[folder]
 
 
+def _missing_model_entry(
+    client: ComfyHttpClient,
+    *,
+    node_id: str,
+    class_type: str,
+    param: str,
+    folder: str,
+    value: str,
+    model_cache: dict[str, set[str] | None],
+) -> dict[str, Any] | None:
+    installed = _installed_models_for_folder(client, folder, model_cache)
+    if installed is None or _model_present(value, installed):
+        return None
+    return {
+        "node_id": node_id,
+        "class_type": class_type,
+        "parameter": param,
+        "folder": folder,
+        "wanted": value,
+        "sample_installed": sorted(installed)[:5],
+    }
+
+
 def _missing_models_for_node(
     client: ComfyHttpClient,
     node_id: str,
@@ -303,19 +326,17 @@ def _missing_models_for_node(
         value = inputs.get(param)
         if not isinstance(value, str) or not value.strip():
             continue
-        installed = _installed_models_for_folder(client, folder, model_cache)
-        if installed is None or _model_present(value, installed):
-            continue
-        missing_models.append(
-            {
-                "node_id": node_id,
-                "class_type": class_type,
-                "parameter": param,
-                "folder": folder,
-                "wanted": value,
-                "sample_installed": sorted(installed)[:5],
-            }
+        entry = _missing_model_entry(
+            client,
+            node_id=node_id,
+            class_type=class_type,
+            param=param,
+            folder=folder,
+            value=value,
+            model_cache=model_cache,
         )
+        if entry is not None:
+            missing_models.append(entry)
     return missing_models
 
 
