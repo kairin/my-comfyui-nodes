@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `comfygo workflow apply` — apply JSON patch ops with auto-checkpoint and optional `--validate` (spec 007).
+- `comfygo workflow checkpoint list|restore` — rollback snapshots under `.comfygo_debug/checkpoints/`.
+- `comfygo workflow diagnose` — read-only JSON report for agent workflow review (`--workflow`, `--prompt-id`, `--latest-error`; spec 006).
 - Guided `comfygo doctor` with Comfygo readiness, Checks, Actions, Recommended next action, and `--apply` with GCD gate (`scripts/comfy-local`, spec 004 Phase 15).
 - Shared 16 GCD scenario harness (`scripts/comfygo-gcd-harness.sh`) used by doctor and `scripts/comfygo-verify`.
 - Doctor options: `--models-dir`, `--keep-evidence`, `--smoke-repatch`, `--yes` for non-interactive apply.

@@ -76,8 +76,41 @@ After sourcing, every `git commit` and `git push` (no matter which agent suggest
 
 You can add the `source` line to your `~/.bashrc`, `~/.zshrc`, or direnv setup for the project.
 
+## Workflow Debug Protocol (for coding agents)
+
+When a user reports ComfyUI workflow errors, use **read-only** diagnosis first:
+
+```bash
+# Failed after queue (preferred — no export needed)
+comfygo workflow diagnose --latest-error
+comfygo workflow diagnose --prompt-id <uuid>
+
+# Pre-queue / validation errors (needs API JSON on disk)
+comfygo workflow diagnose --workflow /path/to/workflow_api.json
+```
+
+1. Parse stdout JSON: `validation.node_errors`, `execution.errors`, `dependencies.missing_*`, `remediation`.
+2. Build a patch file (array of ops: `set_input`, `connect`, `add_node`, `remove_node`) or a full replacement workflow JSON.
+3. Apply patches (saves a checkpoint automatically):
+
+```bash
+comfygo workflow apply --workflow broken.json --patch fixes.json --output fixed.json --validate
+```
+
+4. Re-run `comfygo workflow diagnose --workflow fixed.json` until exit code `0`.
+5. User loads `fixed.json` in ComfyUI (Load or drag-drop). Canvas auto-push is not available in v1.
+
+Rollback:
+
+```bash
+comfygo workflow checkpoint list
+comfygo workflow checkpoint restore --id <checkpoint_id> --output restored.json
+```
+
+Do not queue workflows or mutate the canvas directly. Run `remediation[].command` only with user approval.
+
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/004-comfygo-patched-tmux/plan.md
+at specs/007-workflow-apply/plan.md
 <!-- SPECKIT END -->

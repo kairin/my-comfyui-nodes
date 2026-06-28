@@ -1,0 +1,8 @@
+[
+  {
+    "op": "set_input",
+    "node": "1",
+    "input": "vae_name",
+    "value": "ae.safetensors"
+  }
+]

@@ -84,6 +84,12 @@ Commands:
   models enrich <source>  Enrich HF git-clone/loose file (Civitai if COMFYGO_ENRICH_CIVITAI + token).
   models reconcile -f FILTER [--apply]
                      Self-identify full model folders and create compatibility views.
+  workflow diagnose (--workflow PATH | --prompt-id ID | --latest-error) [--host URL]
+                     Read-only workflow diagnosis JSON for agent review (validation + deps + history errors).
+  workflow apply --workflow PATH --patch PATCH [--output PATH] [--validate] [--host URL]
+                     Apply JSON patches; saves checkpoint under .comfygo_debug/checkpoints/.
+  workflow checkpoint list | checkpoint restore --id ID --output PATH
+                     List or restore pre-apply workflow snapshots.
   sync               Sync vendored nodes into ComfyUI and apply ComfyUI patches.
   start              Sync, then launch ComfyUI. Defaults to localhost:8188.
   restart            Stop comfy-cli background ComfyUI, then start it again.
@@ -703,6 +709,15 @@ run_model_registry_cli() {
   require_uv
   "$repo_dir/scripts/comfygo-models.sh" \
     --models-dir "$(models_root)" \
+    "$@"
+}
+
+run_workflow_cli() {
+  require_uv
+  exec uv run --python "$repo_dir/.venv/bin/python" \
+    --no-project \
+    python \
+    -m custom_nodes.comfygo_model_registry.workflow_cli \
     "$@"
 }
 
@@ -1703,6 +1718,25 @@ case "$command" in
     else
       run_model_registry_cli "$@"
     fi
+    ;;
+
+  workflow)
+    case "${1:-}" in
+      diagnose|apply)
+        subcmd="$1"
+        shift
+        run_workflow_cli "$subcmd" "$@"
+        ;;
+      checkpoint)
+        shift
+        run_workflow_cli checkpoint "$@"
+        ;;
+      *)
+        echo "workflow: unknown subcommand '${1:-}'" >&2
+        echo "  comfygo workflow diagnose | apply | checkpoint ..." >&2
+        exit 1
+        ;;
+    esac
     ;;
 
   sync)
