@@ -88,6 +88,37 @@ class TestReconcileApply:
         assert link.is_symlink()
         assert link.resolve() == (tmp_path / "MyModel" / "transformer").resolve()
 
+    def test_file_component_symlink_uses_weight_filename(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """Single-file LoRA views must use the .safetensors name for ComfyUI listing."""
+        folder = tmp_path / "MyLoRA"
+        folder.mkdir()
+        weight = folder / "adapter.safetensors"
+        weight.write_text("fake", encoding="utf-8")
+        pkg = models.ModelPackage(
+            name="MyLoRA",
+            path=folder.resolve(),
+            kind=models.ModelKind.LORA,
+            components=[
+                models.Component(
+                    logical_name="lora",
+                    relative_path=pathlib.Path("adapter.safetensors"),
+                    comfy_categories=["loras"],
+                )
+            ],
+            detection_method=models.DetectionMethod.DESCRIPTOR,
+        )
+        reconciler.reconcile([pkg], tmp_path, dry_run=False)
+        link = (
+            compat_views.views_root(tmp_path)
+            / "loras"
+            / "MyLoRA"
+            / "adapter.safetensors"
+        )
+        assert link.is_symlink()
+        assert link.resolve() == weight.resolve()
+
     def test_apply_creates_only_symlinks_under_views_root(
         self,
         tmp_path: pathlib.Path,

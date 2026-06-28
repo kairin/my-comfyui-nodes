@@ -48,6 +48,13 @@ class ReconcileReport:
             print(f"{prefix}Pruned {self.views_pruned} stale view(s)")
 
 
+def _view_component_name(comp: models.Component, target_path: pathlib.Path) -> str:
+    """Use the weight filename for file components so ComfyUI extension filters match."""
+    if target_path.is_file():
+        return target_path.name
+    return comp.logical_name
+
+
 def reconcile(
     packages: list[models.ModelPackage],
     models_dir: pathlib.Path,
@@ -96,18 +103,19 @@ def reconcile(
                     f"resolves outside the package or model root — skipping"
                 )
                 continue
+            view_name = _view_component_name(comp, target_path)
             for category in comp.comfy_categories:
                 view = models.CompatibilityView(
                     category=category,
                     model_name=pkg.name,
-                    component_name=comp.logical_name,
+                    component_name=view_name,
                     target_path=target_path,
                 )
 
                 # Check for conflicts with already-registered views.
-                conflict_key = f"{category}/{pkg.name}/{comp.logical_name}"
+                conflict_key = f"{category}/{pkg.name}/{view_name}"
                 existing = _find_matching_view(
-                    desired_views, category, pkg.name, comp.logical_name
+                    desired_views, category, pkg.name, view_name
                 )
                 if existing is not None:
                     report.conflicts.append(
