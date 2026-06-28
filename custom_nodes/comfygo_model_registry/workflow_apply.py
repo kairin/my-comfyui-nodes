@@ -189,6 +189,28 @@ def _apply_add_node(workflow: dict[str, Any], patch: dict[str, Any]) -> dict[str
     }
 
 
+def _references_node(input_value: Any, node_id: str) -> bool:
+    return (
+        isinstance(input_value, list)
+        and len(input_value) == 2
+        and str(input_value[0]) == node_id
+    )
+
+
+def _clear_connections_to_node(
+    workflow: dict[str, Any], node_id: str
+) -> list[dict[str, str]]:
+    cleared: list[dict[str, str]] = []
+    for other_id, node in workflow.items():
+        inputs = node.get("inputs") or {}
+        for input_name, input_value in list(inputs.items()):
+            if not _references_node(input_value, node_id):
+                continue
+            del inputs[input_name]
+            cleared.append({"node": other_id, "input": input_name})
+    return cleared
+
+
 def _apply_remove_node(
     workflow: dict[str, Any], patch: dict[str, Any]
 ) -> dict[str, Any]:
@@ -196,22 +218,11 @@ def _apply_remove_node(
     if node_id not in workflow:
         raise KeyError(f"Node not found: {node_id}")
     removed = workflow.pop(node_id)
-    cleared: list[dict[str, str]] = []
-    for other_id, node in workflow.items():
-        inputs = node.get("inputs") or {}
-        for input_name, input_value in list(inputs.items()):
-            if (
-                isinstance(input_value, list)
-                and len(input_value) == 2
-                and str(input_value[0]) == node_id
-            ):
-                del inputs[input_name]
-                cleared.append({"node": other_id, "input": input_name})
     return {
         "op": "remove_node",
         "node_id": node_id,
         "removed_class_type": removed.get("class_type"),
-        "cleared_connections": cleared,
+        "cleared_connections": _clear_connections_to_node(workflow, node_id),
     }
 
 

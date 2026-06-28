@@ -106,13 +106,16 @@ def load_workflow_file(path: pathlib.Path) -> dict[str, Any]:
     return normalize_workflow(data)
 
 
+def _is_api_node_map(data: dict[str, Any]) -> bool:
+    return all(isinstance(k, str) and isinstance(v, dict) for k, v in data.items())
+
+
 def normalize_workflow(data: dict[str, Any]) -> dict[str, Any]:
     """Accept bare API prompt or wrapped {prompt: {...}}."""
-    if "prompt" in data and isinstance(data["prompt"], dict):
-        inner = data["prompt"]
-        if all(isinstance(k, str) and isinstance(v, dict) for k, v in inner.items()):
-            return inner
-    if all(isinstance(k, str) and isinstance(v, dict) for k, v in data.items()):
+    prompt = data.get("prompt")
+    if isinstance(prompt, dict) and _is_api_node_map(prompt):
+        return prompt
+    if _is_api_node_map(data):
         return data
     raise ValueError("Unrecognized workflow JSON shape; expected API-format node map")
 
@@ -193,22 +196,32 @@ def _folder_aliases(folder: str) -> list[str]:
     return FOLDER_ALIASES.get(folder, [folder])
 
 
+def _model_name_from_item(item: Any) -> str | None:
+    if isinstance(item, str):
+        return item
+    if isinstance(item, dict):
+        for key in ("name", "filename", "path"):
+            val = item.get(key)
+            if isinstance(val, str):
+                return val
+    return None
+
+
 def _parse_model_list(payload: Any) -> set[str]:
-    names: set[str] = set()
     if isinstance(payload, list):
+        names: set[str] = set()
         for item in payload:
-            if isinstance(item, str):
-                names.add(item)
-            elif isinstance(item, dict):
-                for key in ("name", "filename", "path"):
-                    val = item.get(key)
-                    if isinstance(val, str):
-                        names.add(val)
-    elif isinstance(payload, dict):
+            name = _model_name_from_item(item)
+            if name:
+                names.add(name)
+        return names
+    if isinstance(payload, dict):
+        names = set()
         for key in ("models", "files", "items"):
             if key in payload:
                 names.update(_parse_model_list(payload[key]))
-    return names
+        return names
+    return set()
 
 
 def _model_present(needed: str, installed: set[str]) -> bool:
@@ -241,89 +254,109 @@ def fetch_models_for_folder(client: ComfyHttpClient, folder: str) -> set[str] | 
     return combined if any_ok else None
 
 
-def check_dependencies(
-    client: ComfyHttpClient,
-    workflow: dict[str, Any],
-) -> dict[str, Any]:
-    required_nodes = {
+def _required_class_types(workflow: dict[str, Any]) -> set[str]:
+    return {
         node.get("class_type")
         for node in workflow.values()
         if isinstance(node, dict) and node.get("class_type")
     }
-    installed_nodes, skip_reason = fetch_object_info(client)
-    missing_nodes: list[dict[str, Any]] = []
-    if installed_nodes is None:
-        node_check_skipped = True
-    else:
-        node_check_skipped = False
-        for cls in sorted(required_nodes):
-            if cls not in installed_nodes:
-                entry: dict[str, Any] = {"class_type": cls}
-                pkg = NODE_TO_PACKAGE.get(cls)
-                if pkg:
-                    entry["fix_command"] = f"comfy node install {pkg}"
-                missing_nodes.append(entry)
 
+
+def _missing_node_entries(
+    required_nodes: set[str], installed_nodes: set[str]
+) -> list[dict[str, Any]]:
+    missing_nodes: list[dict[str, Any]] = []
+    for cls in sorted(required_nodes):
+        if cls in installed_nodes:
+            continue
+        entry: dict[str, Any] = {"class_type": cls}
+        pkg = NODE_TO_PACKAGE.get(cls)
+        if pkg:
+            entry["fix_command"] = f"comfy node install {pkg}"
+        missing_nodes.append(entry)
+    return missing_nodes
+
+
+def _missing_model_entries(
+    client: ComfyHttpClient,
+    workflow: dict[str, Any],
+    model_cache: dict[str, set[str] | None],
+) -> list[dict[str, Any]]:
     missing_models: list[dict[str, Any]] = []
-    model_cache: dict[str, set[str] | None] = {}
     for node_id, node in workflow.items():
         if not isinstance(node, dict):
             continue
         class_type = node.get("class_type")
-        if not class_type or class_type not in MODEL_LOADERS:
+        loader_params = MODEL_LOADERS.get(class_type or "")
+        if not loader_params:
             continue
         inputs = node.get("inputs") or {}
-        for param, folder in MODEL_LOADERS[class_type]:
+        for param, folder in loader_params:
             value = inputs.get(param)
             if not isinstance(value, str) or not value.strip():
                 continue
             if folder not in model_cache:
                 model_cache[folder] = fetch_models_for_folder(client, folder)
             installed = model_cache[folder]
-            if installed is None:
+            if installed is None or _model_present(value, installed):
                 continue
-            if not _model_present(value, installed):
-                missing_models.append(
-                    {
-                        "node_id": node_id,
-                        "class_type": class_type,
-                        "parameter": param,
-                        "folder": folder,
-                        "wanted": value,
-                        "sample_installed": sorted(installed)[:5],
-                    }
-                )
+            missing_models.append(
+                {
+                    "node_id": node_id,
+                    "class_type": class_type,
+                    "parameter": param,
+                    "folder": folder,
+                    "wanted": value,
+                    "sample_installed": sorted(installed)[:5],
+                }
+            )
+    return missing_models
+
+
+def check_dependencies(
+    client: ComfyHttpClient,
+    workflow: dict[str, Any],
+) -> dict[str, Any]:
+    installed_nodes, skip_reason = fetch_object_info(client)
+    if installed_nodes is None:
+        missing_nodes: list[dict[str, Any]] = []
+        node_check_skipped = True
+    else:
+        missing_nodes = _missing_node_entries(
+            _required_class_types(workflow), installed_nodes
+        )
+        node_check_skipped = False
 
     result: dict[str, Any] = {
         "missing_nodes": missing_nodes,
-        "missing_models": missing_models,
+        "missing_models": _missing_model_entries(client, workflow, {}),
     }
     if node_check_skipped:
         result["skipped_reason"] = skip_reason
     return result
 
 
-def build_remediation(
-    validation: dict[str, Any],
-    dependencies: dict[str, Any],
-    execution: dict[str, Any] | None,
-) -> list[dict[str, Any]]:
+def _validation_hints(validation: dict[str, Any]) -> list[dict[str, Any]]:
     hints: list[dict[str, Any]] = []
-
     for node_id, err_block in (validation.get("node_errors") or {}).items():
         if not isinstance(err_block, dict):
             continue
         for err in err_block.get("errors") or []:
-            if isinstance(err, dict):
-                hints.append(
-                    {
-                        "kind": "validation_error",
-                        "node_id": node_id,
-                        "message": err.get("message") or str(err),
-                        "details": err.get("details"),
-                    }
-                )
+            if not isinstance(err, dict):
+                continue
+            hints.append(
+                {
+                    "kind": "validation_error",
+                    "node_id": node_id,
+                    "message": err.get("message") or str(err),
+                    "details": err.get("details"),
+                }
+            )
+    return hints
 
+
+def _dependency_hints(dependencies: dict[str, Any]) -> list[dict[str, Any]]:
+    hints: list[dict[str, Any]] = []
     for node in dependencies.get("missing_nodes") or []:
         hints.append(
             {
@@ -333,7 +366,6 @@ def build_remediation(
                 "class_type": node.get("class_type"),
             }
         )
-
     for model in dependencies.get("missing_models") or []:
         hints.append(
             {
@@ -346,20 +378,36 @@ def build_remediation(
                 ),
             }
         )
-
-    if execution and execution.get("errors"):
-        for err in execution["errors"]:
-            hints.append(
-                {
-                    "kind": "execution_error",
-                    "message": err.get("exception_message")
-                    if isinstance(err, dict)
-                    else str(err),
-                    "node_id": err.get("node_id") if isinstance(err, dict) else None,
-                }
-            )
-
     return hints
+
+
+def _execution_hints(execution: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not execution or not execution.get("errors"):
+        return []
+    hints: list[dict[str, Any]] = []
+    for err in execution["errors"]:
+        hints.append(
+            {
+                "kind": "execution_error",
+                "message": err.get("exception_message")
+                if isinstance(err, dict)
+                else str(err),
+                "node_id": err.get("node_id") if isinstance(err, dict) else None,
+            }
+        )
+    return hints
+
+
+def build_remediation(
+    validation: dict[str, Any],
+    dependencies: dict[str, Any],
+    execution: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    return (
+        _validation_hints(validation)
+        + _dependency_hints(dependencies)
+        + _execution_hints(execution)
+    )
 
 
 def fetch_history_entry(client: ComfyHttpClient, prompt_id: str) -> dict[str, Any]:
@@ -414,6 +462,38 @@ def build_diagnose_report(
     }
 
 
+def _resolve_prompt_id(
+    client: ComfyHttpClient, options: DiagnoseOptions
+) -> tuple[DiagnoseOptions, str | None]:
+    if options.latest_error:
+        prompt_id = find_latest_error_prompt_id(client)
+        return (
+            DiagnoseOptions(
+                host=options.host,
+                prompt_id=prompt_id,
+                latest_error=True,
+            ),
+            prompt_id,
+        )
+    return options, options.prompt_id
+
+
+def _workflow_from_history(
+    client: ComfyHttpClient, options: DiagnoseOptions, prompt_id: str
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    entry = fetch_history_entry(client, prompt_id)
+    workflow = extract_workflow_from_history(entry)
+    if workflow is None:
+        raise ValueError(f"Could not extract workflow from history entry: {prompt_id}")
+    execution = extract_execution_diagnostics(entry)
+    source = {
+        "type": "latest_error" if options.latest_error else "prompt_id",
+        "prompt_id": prompt_id,
+        "host": options.host,
+    }
+    return workflow, source, execution
+
+
 def diagnose(client: ComfyHttpClient, options: DiagnoseOptions) -> dict[str, Any]:
     modes = sum(
         [
@@ -427,30 +507,9 @@ def diagnose(client: ComfyHttpClient, options: DiagnoseOptions) -> dict[str, Any
             "Specify exactly one of workflow_path, prompt_id, or latest_error"
         )
 
-    execution: dict[str, Any] | None = None
-    prompt_id = options.prompt_id
-
-    if options.latest_error:
-        prompt_id = find_latest_error_prompt_id(client)
-        options = DiagnoseOptions(
-            host=options.host,
-            prompt_id=prompt_id,
-            latest_error=True,
-        )
-
+    options, prompt_id = _resolve_prompt_id(client, options)
     if prompt_id:
-        entry = fetch_history_entry(client, prompt_id)
-        workflow = extract_workflow_from_history(entry)
-        if workflow is None:
-            raise ValueError(
-                f"Could not extract workflow from history entry: {prompt_id}"
-            )
-        execution = extract_execution_diagnostics(entry)
-        source = {
-            "type": "latest_error" if options.latest_error else "prompt_id",
-            "prompt_id": prompt_id,
-            "host": options.host,
-        }
+        workflow, source, execution = _workflow_from_history(client, options, prompt_id)
     else:
         assert options.workflow_path is not None
         workflow = load_workflow_file(options.workflow_path)
@@ -459,6 +518,7 @@ def diagnose(client: ComfyHttpClient, options: DiagnoseOptions) -> dict[str, Any
             "path": str(options.workflow_path),
             "host": options.host,
         }
+        execution = None
 
     validation = validate_workflow(client, workflow)
     dependencies = check_dependencies(client, workflow)

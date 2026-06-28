@@ -23,13 +23,7 @@ from .workflow_diagnose import (
 )
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="comfygo workflow",
-        description="Diagnose and patch ComfyUI API workflows for agent review.",
-    )
-    sub = parser.add_subparsers(dest="command", required=True)
-
+def _add_diagnose_parser(sub: argparse._SubParsersAction) -> None:
     diag = sub.add_parser(
         "diagnose",
         help="Validate workflow and emit structured JSON report",
@@ -51,6 +45,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--pretty", action="store_true", help="Pretty-print JSON to stdout"
     )
 
+
+def _add_apply_parser(sub: argparse._SubParsersAction) -> None:
     apply_p = sub.add_parser("apply", help="Apply JSON patches to a workflow file")
     apply_p.add_argument(
         "--workflow", type=pathlib.Path, required=True, help="Input workflow JSON"
@@ -76,6 +72,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--pretty", action="store_true", help="Pretty-print JSON to stdout"
     )
 
+
+def _add_checkpoint_parser(sub: argparse._SubParsersAction) -> None:
     ckpt = sub.add_parser("checkpoint", help="List or restore workflow checkpoints")
     ckpt_sub = ckpt.add_subparsers(dest="checkpoint_command", required=True)
     ckpt_sub.add_parser("list", help="List saved checkpoints")
@@ -88,6 +86,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--pretty", action="store_true", help="Pretty-print JSON to stdout"
     )
 
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="comfygo workflow",
+        description="Diagnose and patch ComfyUI API workflows for agent review.",
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+    _add_diagnose_parser(sub)
+    _add_apply_parser(sub)
+    _add_checkpoint_parser(sub)
     return parser
 
 
