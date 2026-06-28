@@ -699,13 +699,16 @@ def _build_descriptor_payload(
         "schema": "comfygo.model.v1",
         "name": package_name,
         "kind": kind,
-        "source": {
+        "components": components,
+    }
+    if repo:
+        descriptor["source"] = {
             "type": "huggingface",
             "repo": repo,
             "version": revision,
-        },
-        "components": components,
-    }
+        }
+    else:
+        descriptor["source"] = {"type": "local"}
     if civitai:
         descriptor["source"]["civitai"] = civitai
 
@@ -720,6 +723,159 @@ def _write_json(path: Path, data: Dict[str, Any]) -> None:
     path.write_text(
         json.dumps(data, indent=2, sort_keys=False) + "\n", encoding="utf-8"
     )
+
+
+_LOCAL_WEIGHT_SUFFIXES = (
+    ".safetensors",
+    ".ckpt",
+    ".bin",
+    ".pt",
+    ".pth",
+    ".gguf",
+    ".sft",
+)
+_SKIP_SCAN_DIR_NAMES = {".comfygo_trash", ".comfygo_views", ".git"}
+
+
+def _is_model_package_dir(package_dir: Path) -> bool:
+    if (package_dir / "model_index.json").is_file():
+        return True
+    for suffix in _LOCAL_WEIGHT_SUFFIXES:
+        if any(package_dir.rglob(f"*{suffix}")):
+            return True
+    return False
+
+
+def _list_local_package_files(package_dir: Path) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for path in sorted(package_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(package_dir)
+        if any(part.startswith(".") for part in rel.parts):
+            continue
+        if rel.parts and rel.parts[0] == "civitai":
+            continue
+        name = rel.as_posix()
+        lower = name.lower()
+        if name == "model_index.json" or any(
+            lower.endswith(suffix) for suffix in _LOCAL_WEIGHT_SUFFIXES
+        ):
+            rows.append({"name": name, "size": path.stat().st_size})
+    return rows
+
+
+def _enrich_local_package(package_dir: Path, args: argparse.Namespace) -> int:
+    package_dir = package_dir.resolve()
+    descriptor_path = package_dir / "comfygo-model.json"
+    if descriptor_path.exists() and not args.overwrite_descriptor and args.only_missing:
+        print(f"skip: {package_dir.name} already has descriptor")
+        return 0
+
+    rows = _list_local_package_files(package_dir)
+    if not rows:
+        print(f"skip: no model files in {package_dir}")
+        return 0
+
+    try:
+        inferred_repo, inferred_revision, inferred_package_name = _read_package_state(
+            package_dir
+        )
+    except CliError:
+        inferred_repo = inferred_revision = inferred_package_name = None
+
+    package_name = (
+        args.package_name
+        or inferred_package_name
+        or _sanitize_path_segment(package_dir.name)
+    )
+    repo = inferred_repo or ""
+    revision = inferred_revision or "local"
+    selected = rows
+
+    civitai = None
+    civitai_token = os.getenv("CIVITAI_TOKEN") or os.getenv("CIVITAI_API_TOKEN", "")
+    if civitai_token and package_name:
+        civitai = _fetch_civitai(package_name, civitai_token)
+        if civitai:
+            print(f"Civitai match: {civitai.get('name')}")
+
+    if args.write_descriptor:
+        descriptor_payload = _build_descriptor_payload(
+            repo=repo,
+            revision=revision,
+            package_name=package_name,
+            selected_files=selected,
+            kind_override=args.kind,
+            note=args.descriptor_note,
+            category_overrides=_split_args_file_patterns(args.category_mapping),
+            use_descriptor=True,
+            civitai=civitai,
+        )
+        if descriptor_payload:
+            if descriptor_path.exists() and not args.overwrite_descriptor:
+                print(
+                    "Descriptor exists; skipping overwrite. Use --overwrite-descriptor to replace."
+                )
+            else:
+                _write_json(descriptor_path, descriptor_payload)
+                print(f"wrote descriptor: {descriptor_path}")
+
+        if civitai:
+            civitai_dir = package_dir / "civitai"
+            civitai_dir.mkdir(parents=True, exist_ok=True)
+            (civitai_dir / "info.json").write_text(
+                json.dumps(civitai, indent=2) + "\n", encoding="utf-8"
+            )
+            print(f"wrote civitai side folder: {civitai_dir}")
+
+    if args.write_metadata and repo:
+        metadata_path = package_dir / args.metadata_file
+        downloaded_paths = {row["name"]: int(row["size"]) for row in selected}
+        _write_metadata(
+            metadata_path,
+            repo=repo,
+            revision=revision,
+            package_name=package_name,
+            package_dir=package_dir,
+            selected=selected,
+            downloaded_paths=downloaded_paths,
+        )
+        print(f"wrote metadata: {metadata_path}")
+
+    print(f"package root: {package_dir}")
+    return 0
+
+
+def _scan_models_root(models_root: Path, args: argparse.Namespace) -> int:
+    if not models_root.is_dir():
+        print(f"--scan-models-root is not a directory: {models_root}")
+        return 1
+
+    enriched = 0
+    skipped = 0
+    failures = 0
+
+    for child in sorted(models_root.iterdir(), key=lambda path: path.name.lower()):
+        if child.name.startswith(".") or child.name in _SKIP_SCAN_DIR_NAMES:
+            continue
+        if not child.is_dir() or not _is_model_package_dir(child):
+            continue
+        if args.only_missing and (child / "comfygo-model.json").exists():
+            skipped += 1
+            continue
+        print(f"enrich: {child.name}")
+        try:
+            if _enrich_local_package(child, args) == 0:
+                enriched += 1
+            else:
+                failures += 1
+        except CliError as err:
+            print(str(err), file=sys.stderr)
+            failures += 1
+
+    print(f"scan complete: enriched={enriched} skipped={skipped} failed={failures}")
+    return 1 if failures else 0
 
 
 def _write_metadata(
@@ -807,6 +963,11 @@ def parse_args() -> argparse.Namespace:
         "--models-root",
         default=None,
         help="Base models folder for package mode (default: COMFYUI_MODELS_DIR or COMFYUI_DIR/models)",
+    )
+    parser.add_argument(
+        "--scan-models-root",
+        default=None,
+        help="Scan a models directory and enrich package folders missing comfygo-model.json (headless).",
     )
     parser.add_argument(
         "--package-name",
@@ -919,6 +1080,16 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
 
+    if args.scan_models_root:
+        if not args.write_descriptor:
+            args.write_descriptor = True
+        if not args.all:
+            args.all = True
+        return _scan_models_root(
+            Path(args.scan_models_root).expanduser().resolve(),
+            args,
+        )
+
     source = (args.repo or "").strip()
     source_dir = _resolve_directory_arg(source)
     if source_dir is not None:
@@ -957,6 +1128,8 @@ def main() -> int:
 
         if not repo:
             if inferred_repo is None:
+                if args.write_descriptor or args.all:
+                    return _enrich_local_package(package_dir, args)
                 prompted = _prompt_repo()
                 if not prompted:
                     print(

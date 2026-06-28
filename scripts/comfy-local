@@ -1244,7 +1244,7 @@ doctor_print_actions() {
     reason="${status_line#*|}"
     printf '  %-18s %s\n' "$status" "$action"
     if [[ "$status" == "available" ]]; then
-      echo "    run: scripts/comfygo doctor --apply $action"
+      echo "    run: comfygo doctor --apply $action"
     elif [[ -n "$reason" ]]; then
       echo "    reason: $reason"
     fi
@@ -1373,7 +1373,7 @@ doctor_apply_action() {
 doctor_usage() {
   cat <<'EOF'
 Usage:
-  scripts/comfygo doctor [options]
+  comfygo doctor [options]
 
 Options:
   --models-dir PATH   Use explicit model root for read-only checks
@@ -1483,7 +1483,7 @@ doctor() {
     rec_action="${rec_line%%|*}"
     rec_reason="${rec_line#*|}"
     echo "  $rec_action - $rec_reason"
-    echo "  To run: scripts/comfygo doctor --apply $rec_action"
+    echo "  To run: comfygo doctor --apply $rec_action"
   else
     echo "  (none - all catalog actions blocked or not relevant)"
   fi
@@ -1589,7 +1589,11 @@ full_launch_sequence() {
       if [[ -f "$pdir/manifest.md" ]]; then
         echo "Checking drift for $pdir..."
         local drift_output
-        drift_output=$(patch_drift_check "$COMFYUI_DIR" "$pdir" 2>/dev/null || true)
+        local patch_target="$COMFYUI_DIR"
+        if [[ "$pdir" == *comfy-cli* ]]; then
+          patch_target="$COMFY_CLI_DIR"
+        fi
+        drift_output=$(patch_drift_check "$patch_target" "$pdir" 2>/dev/null || true)
         echo "$drift_output"
         # conditional re-apply if any "not applied" (now with exact contract message from enhanced driver)
         if echo "$drift_output" | grep -q "not applied"; then
@@ -1608,16 +1612,14 @@ full_launch_sequence() {
     echo "=== Model enrichment (Civitai/HF) ==="
     model_root="$(models_root 2>/dev/null || echo "")"
     if [[ -n "$model_root" && -d "$model_root" && -r "$model_root" ]]; then
-      # Actually call the enrich helper (not stub) for auto-enrichment during launch.
-      # Uses --only-missing to skip existing, writes rich descriptor + metadata + side folder if applicable.
-      # Graceful degradation on no token / failure per FR-008, Key Entities (basic usable local descriptor).
-      # uv-first, respects direnv tokens.
+      # Headless scan of existing model-root packages missing descriptors (T094).
+      # Graceful degradation on no token / failure per FR-008 (basic usable local descriptor).
       uv run --no-project python3 "$repo_dir/scripts/hf_select_download.py" \
-        --models-root "$model_root" \
+        --scan-models-root "$model_root" \
         --only-missing \
         --write-descriptor \
         --write-metadata \
-        --package-name "auto-enrich" 2>&1 || echo "Enrichment skipped or partial (no token, no match, or error - see FR-008 graceful basic descriptor)"
+        --all 2>&1 || echo "Enrichment skipped or partial (no token, no match, or error - see FR-008 graceful basic descriptor)"
     else
       echo "No readable model root for auto-enrich (COMFY_MODELS_DIR or sibling of COMFYUI_DIR)"
     fi

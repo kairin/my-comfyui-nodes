@@ -8,37 +8,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Initial project structure with vendored custom nodes and comfygo management scripts (from specs 001-003).
-- Descriptor-first model registry (comfygo-model.json support, scanner, reconciler for .comfygo_views).
-- GC safety harness and doctor flows (GCD scenarios 001-016).
-- Guided comfygo doctor work in progress (see spec 004).
-- Constitution updates for changelog (VIII) and branch protection/safety nets (IX).
-- Up-front settings loader support in comfy-local (for 004 feature: patching, launch/tmux policy, enrichment, protection reminders).
+- Guided `comfygo doctor` with Comfygo readiness, Checks, Actions, Recommended next action, and `--apply` with GCD gate (`scripts/comfy-local`, spec 004 Phase 15).
+- Shared 16 GCD scenario harness (`scripts/comfygo-gcd-harness.sh`) used by doctor and `scripts/comfygo-verify`.
+- Doctor options: `--models-dir`, `--keep-evidence`, `--smoke-repatch`, `--yes` for non-interactive apply.
+- `scripts/speckit-progress.py` task progress diagnostic for speckit convergence tracking.
+- Headless model-root auto-enrichment during launch when `COMFYGO_ENRICH_CIVITAI=1` via `--scan-models-root` in `scripts/hf_select_download.py`.
+- Initial project structure with vendored custom nodes and comfygo management scripts (specs 001–003).
+- Descriptor-first model registry (`comfygo-model.json`, scanner, reconciler for `.comfygo_views`).
+- Constitution principles VIII (changelog) and IX (branch protection/safety nets).
+- Up-front settings loader in `scripts/comfy-local` (patching, launch/tmux, enrichment, protection keys).
 
 ### Changed
-- Test scaffolding exclusions added to sync scripts and local-nodes patch to prevent runtime import issues during ComfyUI startup.
-- Constitution version bumped to 1.2.0 with new principles.
-- docs/workflow.md updated with accurate current GitHub protection state (from gh api) and aligned to T004/T005/T034.
-- .pre-commit-config.yaml migrated to modern stages (pre-commit, pre-push); ruff scoped to owned code only (comfygo_model_registry + scripts) to respect Constitution I (no vendored edits).
+- `comfygo doctor` runs 16 GCD scenarios by default and blocks `--apply` until `PASS: all 16`.
+- Launch sequence skips re-patch when tmux target is active (avoids disrupting running ComfyUI per spec edge case).
+- Launch auto-enrichment uses structured manifest parsing and real `hf_select_download.py` integration (not stub).
+- `patch_drift_check` parses `## Historical Names` in manifests and emits exact Error and Exit Contract messages.
+- `scripts/comfygo-verify` Phase 3 delegates to shared GCD harness (no duplicated scenario logic).
+- README, `docs/workflow.md`, and `docs/model-library.md` lead with `comfygo` as single entry point (spec 005).
+- Constitution III reinforced with single entry point principle (version 1.2.1).
+- `.pre-commit-config.yaml`: ruff scoped to owned code; verify-quality hook sets `VERIFY_QUALITY_INVOKED_BY_PRE_COMMIT=1`.
+- `docs/workflow.md` updated with solo-maintainer branch protection + Codacy recommendations.
+- Test scaffolding exclusions in sync scripts and local-nodes patch.
 
 ### Fixed
-- Test leakage into runtime custom_nodes that could cause "No module named 'pytest'" warnings at startup (affecting comfygo_model_registry and some vendored nodes' loaders).
-
-### Changed
-- Created `specs/004-comfygo-patched-tmux/tasks.md` following speckit process and approved plan.
-- Created public GitHub issues #95, #96, #97 for key work items (high-level, privacy-safe).
-- Updated `docs/workflow.md` with solo-maintainer "good enough" branch protection + Codacy recommendations.
-- Reran constitution (v1.2.0) adding principles for Changelog and Branch Protection/Safety Nets; propagated to plan template.
-- Seeded and enhanced 004 feature artifacts (spec, plan, tasks) and root CHANGELOG.
-
-### Changed (005-single-entrypoint - docs + constitution single entry point alignment)
-- README.md, docs/workflow.md, and docs/model-library.md updated so all primary user-facing examples and flows lead with `comfygo` (or `comfygo <subcommand>` such as `comfygo models enrich`); direct `scripts/...` paths de-emphasized to explicit "bootstrap / advanced / contributor" sections only, with redirects to the single entry point. Added prominent "Remember one command: `comfygo`" callout.
-- Constitution III. Safe Daily Operation reinforced with explicit "single entry point principle" paragraph (users remember and use only `comfygo` + subcommands for daily ops; internals for contributors/debug only).
-- (Partial for US1; full completion including model-library HF renames + final constitution version bump + full CHANGELOG polish in US2 tasks T019 etc.)
-- See specs/005-single-entrypoint/ (plan + tasks) and 004 Phase 12 T072/T073 for traceability.
+- Pre-commit hang: `verify-quality.sh` no longer recursively invokes pre-commit when run from the verify-quality hook.
+- Launch re-patch drift for `comfy-cli-patches` now checks `COMFY_CLI_DIR` (not `COMFYUI_DIR`).
+- Launch auto-enrichment no longer fails non-interactively with `repo is required unless --resume-from is used` over SSH.
+- Doctor user-facing run lines use `comfygo` instead of `scripts/comfygo`.
+- Test leakage into runtime `custom_nodes` causing `No module named 'pytest'` warnings at startup.
 
 ### Security / Ops
-- Verified current GitHub branch protection (exists but minimal reviews/checks) and Codacy setup (Gate Policy + many tools active). Documented practical solo-maintainer settings (require PRs + status checks; 0 reviews; Codacy check required but grade not blocking). See issue #95 and workflow.md.
+- GitHub branch protection: require PRs + Codacy analysis check; 0 required reviews (solo maintainer). See `docs/workflow.md`.
 
 ## [0.1.0] - 2026-06-20
 

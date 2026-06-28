@@ -378,3 +378,12 @@ The detailed **UPDATE:** notes below are historical observations from earlier co
 - [X] T091 LOW Final handoff + progress script sanity: `uv run --no-project python scripts/speckit-progress.py specs/004-comfygo-patched-tmux/tasks.md` shows 0 actionable open tasks.
 
 **Metrics**: All HIGH/MEDIUM carried gaps from 001–005 review closed. Single entry point `comfygo` realized in code (doctor, enrich, re-patch) and docs (005). No open `[ ]` implementation tasks outside historical appendix.
+
+## Phase 16: Convergence
+
+**Purpose**: Post-Phase 15 assessment (2026-06-28). Re-assess code vs 004 spec/plan after guided doctor, GCD harness, and pre-commit fix landed. Append-only for remaining gaps.
+
+- [X] T092 CRITICAL Update root `CHANGELOG.md` `[Unreleased]` to document Phase 13–15 deliverables (guided `comfygo doctor`, `scripts/comfygo-gcd-harness.sh`, launch enrich integration, structured re-patch driver, pre-commit recursion fix) and remove stale "doctor work in progress" language per Constitution VIII.
+- [X] T093 HIGH Fix `full_launch_sequence` re-patch drift for `comfy-cli-patches`: call `patch_drift_check` with `COMFY_CLI_DIR` (not `COMFYUI_DIR`) when checking/applying comfy-cli manifests per FR-004, FR-005, Error and Exit Contracts (status command already uses correct dir; launch loop does not).
+- [X] T094 HIGH Fix launch auto-enrichment when `COMFYGO_ENRICH_CIVITAI=1`: current call to `hf_select_download.py` with only `--models-root` fails non-interactively (`repo is required unless --resume-from is used`) over SSH; implement headless scan/enrich of existing model-root packages (or explicit `--resume-from` iteration) per FR-002, FR-008, T080, SC-003.
+- [X] T095 LOW Align guided doctor user-facing output to single entry point: replace `scripts/comfygo` / `scripts/comfy-local` in recommended-action and action-inventory run lines with `comfygo` per Constitution III and 005 single-entrypoint.
