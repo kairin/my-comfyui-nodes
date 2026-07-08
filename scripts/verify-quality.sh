@@ -63,14 +63,40 @@ fi
 # 5. Codacy CLI local analysis (if you have local token or for supported tools)
 # Note: Full remote-equivalent requires project token. Run what you can locally.
 echo "→ Codacy CLI (local analysis where possible)..."
-if command -v codacy &> /dev/null; then
-  # The cloud-cli may support analyze in some setups; run a basic check or skip full
-  echo "  Codacy CLI detected. For full local scan mirroring CI:"
-  echo "    codacy analyze --directory . --tool ruff,bandit,shellcheck --no-upload || true"
-  # Attempt a non-blocking run if possible
-  codacy analyze --directory . --tool ruff,bandit 2>/dev/null --no-upload || echo "  (Codacy local analyze skipped or partial - full scan happens in CI)"
+# Local analysis uses codacy-cli-v2 (`codacy-cli`), NOT the cloud CLI (`codacy`), which
+# has no `analyze` command. codacy-cli-v2 needs .codacy/codacy.yaml with pinned
+# "tool@version" strings + the matching runtime (the old "- name: <tool>" form fails to
+# parse and exits 0 with empty SARIF). `analyze` never uploads, so this is CI-safe.
+if [[ -n "${VERIFY_QUALITY_INVOKED_BY_PRE_COMMIT:-}" ]]; then
+  # Skip during pre-commit: codacy-cli analyze is slow and writes .codacy/{logs,tools-configs}
+  # artifacts that would trip pre-commit's "files modified" guard. Codacy runs in CI; run this
+  # script directly for a local scan.
+  echo "  (skipped during pre-commit — Codacy analysis runs in CI; run this script directly for a local scan)"
+elif command -v codacy-cli &> /dev/null; then
+  echo "  codacy-cli detected — running local pylint analysis (no upload)..."
+  # codacy-cli-v2 needs .codacy/codacy.yaml (pinned tool@version + runtime). Track what already
+  # exists and remove only what we create so the working tree is left exactly as we found it
+  # (codacy-cli also generates .codacy/logs, tools-configs, and .gitignore).
+  codacy_dir_existed=1; [[ -d .codacy ]] || codacy_dir_existed=0
+  codacy_cfg=".codacy/codacy.yaml"; created_codacy_cfg=0
+  if [[ ! -f "$codacy_cfg" ]]; then
+    mkdir -p .codacy
+    printf 'runtimes:\n    - python@3.11.11\ntools:\n    - pylint@3.3.6\n' > "$codacy_cfg"
+    created_codacy_cfg=1
+  fi
+  if codacy-cli analyze --tool pylint --format sarif -o "/tmp/codacy-verify-$$.sarif" 2>/dev/null; then
+    echo "  (Codacy local analyze complete — SARIF at /tmp/codacy-verify-$$.sarif)"
+  else
+    echo "  (Codacy local analyze skipped or partial - full scan happens in CI)"
+  fi
+  # Clean up: drop the whole dir if we created it, else remove only the config we wrote.
+  if [[ "$codacy_dir_existed" == "0" ]]; then
+    rm -rf .codacy
+  elif [[ "$created_codacy_cfg" == "1" ]]; then
+    rm -f "$codacy_cfg"
+  fi
 else
-  echo "  (codacy CLI not in PATH - install if you want local Codacy simulation)"
+  echo "  (codacy-cli not in PATH - install codacy-cli-v2 for local Codacy simulation)"
 fi
 
 # 6. Other quick checks (YAML, JSON, large files, etc.)
