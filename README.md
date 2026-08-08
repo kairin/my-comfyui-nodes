@@ -5,11 +5,12 @@ Vendored ComfyUI custom nodes and local patches for a preferred ComfyUI setup.
 This repository is intended to be public. Do not commit API keys, model weights,
 personal prompts, local paths with secrets, or runtime histories here.
 
-## Codacy
+## Quality Gates
 
-This repo is configured with a Codacy CI analysis workflow at `.github/workflows/codacy-analysis.yml`.
-
-**Important**: Codacy is a *final gate*, not the place to discover problems. All code must pass local quality checks *before* you commit or push.
+CI analysis (Codacy) was decommissioned on 2026-08-09. There is no CI status
+check today; code quality is enforced locally via pre-commit hooks and
+`scripts/verify-quality.sh`. Branch protection on `main` requires a pull
+request but does not require any status checks.
 
 ### Local verification (required before commit/push)
 See the detailed process in:
@@ -24,17 +25,7 @@ pre-commit run --all-files
 ./scripts/verify-quality.sh
 ```
 
-This replicates (as much as possible) the tools Codacy runs (Ruff, Bandit, ShellCheck, tests, etc.). When local verification passes, the CI check should pass.
-
-### CI setup
-1. In Codacy, add the GitHub repository `kairin/my-comfyui-nodes`.
-2. Generate a project token in Codacy.
-3. Add it to this repository as GitHub secret `CODACY_PROJECT_TOKEN`.
-4. Push a commit (or open a pull request) to trigger the analysis job.
-
-The workflow expects `.codacy.yml` and runs on `main` and pull requests to `main`.
-
-Branch protection requires the Codacy check to pass before merges.
+This runs Ruff, Bandit, ShellCheck, and the registry tests locally.
 
 ## Layout
 

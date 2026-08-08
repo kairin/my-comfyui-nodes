@@ -96,7 +96,7 @@ See `AGENTS.md` (Workflow Debug Protocol) and `specs/006-workflow-diagnose/`,
 
 ## Local Quality Gates (Mandatory Before Commit/Push)
 
-**Goal**: Ensure code passes Codacy *before* it ever leaves your machine. This prevents sloppy commits, failed merges, wasted GitHub Actions minutes, and Codacy token usage.
+**Goal**: Catch lint, formatting, security, and test issues *before* code ever leaves your machine. This prevents sloppy commits, failed merges, and wasted GitHub Actions minutes. There is no CI analysis workflow to catch problems after the fact — these local checks are the only quality gate.
 
 ### Setup (one time)
 ```bash
@@ -116,7 +116,7 @@ chmod +x scripts/verify-quality.sh
    - Bandit (security)
    - Relevant tests
    - Basic hygiene
-3. Additionally (or if hooks skipped), run the full local verifier that closely matches what Codacy will execute:
+3. Additionally (or if hooks skipped), run the full local verifier:
    ```bash
    ./scripts/verify-quality.sh
    ```
@@ -125,19 +125,15 @@ chmod +x scripts/verify-quality.sh
    git commit -m "..."
    git push
    ```
-5. CI (Codacy) will then run as the final safety net (should be green).
 
-### What the verifier checks (Codacy-equivalent)
-- Ruff (primary Python linter/formatter we have enabled in Codacy)
+### What the verifier checks
+- Ruff (lint + format)
 - ShellCheck
 - Bandit security
 - Registry tests
-- Codacy CLI partial scan (when possible)
 - Other hygiene
 
-If this script passes locally, the Codacy workflow in CI should pass.
-
-**Never push code that fails the local verifier.** If you do, you'll see the same failures (or worse) in the PR and waste resources.
+**Never push code that fails the local verifier.** There is no CI analysis to catch it afterward — a failing check means the code is not ready.
 
 See also:
 - `.pre-commit-config.yaml`
@@ -149,10 +145,12 @@ See also:
 
 This project is maintained by a single developer. Overly strict rules (multiple required human reviews) would be overkill and block work.
 
-**Recommended "good enough" baseline (see GitHub branch protection on `main` + Codacy Gate Policy):**
+**Recommended "good enough" baseline (see GitHub branch protection on `main`):**
 
 - Require pull requests before merging to `main` (no direct pushes).
-- Require status checks to pass (at minimum the Codacy Analysis check from `.github/workflows/codacy-analysis.yml`).
+- No required status checks — CI analysis was decommissioned on 2026-08-09;
+  quality is enforced locally via pre-commit + `scripts/verify-quality.sh`
+  (see above) before code is ever pushed.
 - Required approving reviews: 0 (self-approval by owner is acceptable).
 - Require branches to be up-to-date before merging.
 - Require conversation resolution on PRs.
@@ -160,32 +158,39 @@ This project is maintained by a single developer. Overly strict rules (multiple 
 - Enforce admin restrictions: off (solo flexibility).
 - Linear history: optional.
 
-**Codacy side:**
-- Gate Policy + key tools (Bandit, Pylint/Prospector, ShellCheck, Trivy/Checkov, markdownlint, etc.) stay enabled.
-- The analysis check is required (catches issues early via PR feedback).
-- Grade and goals are guidance/visibility tools. Do not make low grade a hard merge blocker while solo (adjust if the project grows).
-- Use issues and the gate for technical debt tracking.
-
-These provide real safety nets (CI must run, can't silently break main) without slowing a solo maintainer.
+This provides a real safety net (nothing merges to `main` without going
+through a PR) without slowing a solo maintainer, and relies on the local
+quality gates above rather than a CI status check.
 
 Related issues: #95 (protection), and tasks T004/T005 in `specs/004-comfygo-patched-tmux/tasks.md`.
 
 See also the updated constitution (Principles VIII + IX) and root `CHANGELOG.md`.
 
-## Protection Verification (as of 2026-06-21, updated on feature branch)
+## Protection Verification
 
-Current GitHub main protection (from `gh api`):
+**Current** (since 2026-08-09): CI analysis (Codacy) was decommissioned, and
+its required status check was removed from branch protection along with it.
+`main` requires a pull request before merging but has no required status
+checks; quality is enforced entirely by the local gates above.
+
+Run `gh api repos/kairin/my-comfyui-nodes/branches/main/protection` to verify
+the live configuration at any time.
+
+<details>
+<summary>Historical snapshot (as of 2026-06-21, superseded 2026-08-09)</summary>
+
+GitHub main protection (from `gh api`) at the time:
 - required_pull_request_reviews: 0 (self-approval allowed), dismiss_stale_reviews: true, conversation_resolution: true
 - required_status_checks: strict=true, contexts=["analysis"]
 - enforce_admins: false, allow_force_pushes: false, allow_deletions: false, required_linear_history: false
 
-Matches "good enough" solo baseline in constitution IX and task T004/T005.
-
-- Codacy: Gate Policy active, analysis check required in GitHub. Grade/goals for visibility only.
+This matched the "good enough" solo baseline in constitution IX and task
+T004/T005 at the time, including a required Codacy analysis status check
+that has since been removed.
 
 See related: constitution Principles VIII + IX, tasks T004/T005/T034 in 004, issue #95.
 
-Run `gh api repos/kairin/my-comfyui-nodes/branches/main/protection` or `comfygo doctor --protection` (to be added in T007) for checks.
+</details>
 
 ## Changelog Maintenance
 
