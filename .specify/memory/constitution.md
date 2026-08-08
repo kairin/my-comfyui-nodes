@@ -15,6 +15,15 @@
     - Implement root CHANGELOG.md
     - Strengthen GitHub branch protection (add required reviews/status checks)
     - Ensure Codacy gate policy covers new safety requirements
+      (superseded 2026-08-09 — see amendment note below; no Codacy gate exists to cover)
+
+  Working-tree edit (dated 2026-08-09, not version-bumped): removed the
+  Codacy-specific mandates from Principle IX ("status checks from CI/quality
+  tools such as Codacy") and from the Operational Constraints pre-commit
+  clause ("Codacy is the final gate only"). Reason: Codacy tooling/gates were
+  decommissioned account-wide; the underlying branch-protection (PR required,
+  secret scanning, Dependabot) and local-quality-gate (pre-commit +
+  verify-quality.sh) requirements otherwise stand unchanged.
 -->
 
 # my-comfyui-nodes Constitution
@@ -119,10 +128,12 @@ canonical public history and MUST NOT contain secrets or private details.
 ### IX. Enforce Branch Protection and Safety Nets
 
 The default branch (main) MUST have branch protection rules enabled. Relevant
-safety nets (required PR reviews, status checks from CI/quality tools such as
-Codacy, secret scanning, Dependabot) MUST be configured and kept active.
-Changes to protection or tool configurations SHOULD be reviewed. Violations or
-gaps in protection MUST be treated as HIGH priority remediation items.
+safety nets (required PR reviews, secret scanning, Dependabot) MUST be
+configured and kept active. Status checks from CI/quality tools MAY be added
+back as a required check if such a tool is reintroduced, but none is required
+today. Changes to protection or tool configurations SHOULD be reviewed.
+Violations or gaps in protection MUST be treated as HIGH priority remediation
+items.
 
 ## Operational Constraints
 
@@ -138,7 +149,7 @@ gaps in protection MUST be treated as HIGH priority remediation items.
 
 - **Pre-commit quality enforcement**: All code changes MUST pass local verification
   (pre-commit hooks + `./scripts/verify-quality.sh`) *before* any `git commit` or `git push`.
-  Codacy is the final gate only. Sloppy code must never reach the repository.
+  Sloppy code must never reach the repository.
 
 ## Development Workflow
 
