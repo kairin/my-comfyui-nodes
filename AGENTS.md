@@ -18,7 +18,7 @@
 **This rule applies to ANY coding agent you are using** (Grok, Claude, Cursor, Aider, Codex, Hermes, Agy, or future ones). The agent does not matter — the process does.
 
 **Critical rule**: All code must pass local verification *before* you run `git commit` or `git push`.
-Codacy (and branch protection) runs *after* push — failures waste Actions minutes and tokens. Once code is pushed, it is too late.
+There is no CI analysis to catch problems after push — the local checks below are the only quality gate. Once code is pushed, it is too late.
 
 ### Universal Enforcement (Works Regardless of Agent)
 The real cross-agent hook is at the git level:
@@ -35,7 +35,7 @@ pre-commit install
 ./scripts/verify-quality.sh
 ```
 
-The `pre-commit` hook runs automatically on `git commit`. The `verify-quality.sh` script replicates the checks that would make Codacy fail (Ruff, Bandit, ShellCheck, relevant tests, hygiene, etc.).
+The `pre-commit` hook runs automatically on `git commit`. The `verify-quality.sh` script runs the full local check suite (Ruff, Bandit, ShellCheck, relevant tests, hygiene, etc.).
 
 **Never use `git commit --no-verify` or `git push --no-verify`** except in genuine emergencies (and document the reason).
 
@@ -52,7 +52,7 @@ See also:
 - `.pre-commit-config.yaml`
 - `scripts/verify-quality.sh`
 - `docs/workflow.md` (Local Quality Gates section)
-- Root `README.md` (Codacy section)
+- Root `README.md` (Quality Gates section)
 - The `local-quality-gates` skill (for agents that support formal skills like Grok)
 
 ### For Agents That Support Skills (Grok, etc.)

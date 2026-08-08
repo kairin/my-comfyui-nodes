@@ -1,4 +1,4 @@
-# Shared Bandit config — used by pre-commit, verify-quality.sh, and Codacy CI.
+# Shared Bandit config — used by pre-commit and verify-quality.sh.
 skips:
   - B101  # assert in tests
   - B404  # subprocess import (intentional in CLI wrappers)

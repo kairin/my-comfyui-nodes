@@ -1,9 +1,9 @@
 # Pre-commit hooks for local quality gates
-# This ensures code is clean BEFORE commit/push, so Codacy (and other CI) always passes.
+# This ensures code is clean BEFORE commit/push.
 # Install once: uv tool install pre-commit && pre-commit install
 # Then: pre-commit run --all-files  (to run manually)
 #
-# Goal: Catch issues that would fail Codacy analysis locally.
+# Goal: Catch lint/format/security issues locally, before they reach a PR.
 # Run this before every commit. Do not bypass with --no-verify.
 
 repos:
@@ -22,7 +22,7 @@ repos:
       - id: check-json
         exclude: ^(custom_nodes/.*\.json|custom_nodes/.*\.json)$
 
-  # Python: Ruff (format + lint) - matches what we enabled in Codacy
+  # Python: Ruff (format + lint)
   # Scope to owned code only (exclude all vendored third-party custom nodes)
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.4.4
@@ -33,7 +33,7 @@ repos:
       - id: ruff-format
         files: ^(custom_nodes/comfygo_model_registry|scripts)/
 
-  # Shell scripts: ShellCheck (matches Codacy ShellCheck)
+  # Shell scripts: ShellCheck
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.10.0.1
     hooks:
@@ -41,7 +41,7 @@ repos:
         args: [--severity=warning]
         files: ^scripts/.*\.(sh|bash)$
 
-  # Python security: Bandit (matches Codacy Bandit)
+  # Python security: Bandit
   - repo: https://github.com/PyCQA/bandit
     rev: 1.7.9
     hooks:
@@ -51,11 +51,11 @@ repos:
 
   # Registry tests run via the local verify-quality hook below (mirrors-pytest repo was removed upstream).
 
-  # Local script to run full local verification mimicking Codacy + more
+  # Local script to run the full local quality verification suite
   - repo: local
     hooks:
       - id: verify-quality
-        name: Full local quality verification (Codacy-equivalent)
+        name: Full local quality verification
         entry: bash -c 'export VERIFY_QUALITY_INVOKED_BY_PRE_COMMIT=1; exec scripts/verify-quality.sh'
         language: system
         pass_filenames: false

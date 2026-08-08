@@ -1,9 +1,0 @@
-exclude_paths:
-  - .venv/**
-  - .pytest_cache/**
-  - .comfygo_views/**
-  - .cache/**
-  - .github/**
-  - .specify/**
-  - docs/**
-  - UPSTREAMS.tsv
